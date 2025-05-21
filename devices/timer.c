@@ -7,7 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-
+  
 /* See [8254] for hardware details of the 8254 timer chip. */
 
 #if TIMER_FREQ < 19
@@ -89,9 +89,11 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t waiting_time = timer_ticks () + ticks;
-  ASSERT (intr_get_level () == INTR_ON);
-  thread_sleep(waiting_time);
+   int64_t start = timer_ticks ();
+
+   ASSERT (intr_get_level() == INTR_ON);
+   if (timer_elapsed (start) < ticks)
+    thread_sleep(start + ticks);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -164,25 +166,25 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
-  ticks++; 
-  
+  ticks++;
   thread_tick ();
-  if(thread_mlfqs){
-    mlfqs_increment();
-    if(ticks % 4 == 0){
+  thread_wake(timer_ticks ());
+
+  if (!thread_mlfqs) return;
+  mlfqs_increment();
+  if (ticks % 4 == 0)
+  {
       mlfqs_priority_all();
-      if(ticks % TIMER_FREQ == 0){
-        mlfqs_load_avg();
-        mlfqs_recent_cpu_all();
+      if (ticks % TIMER_FREQ == 0)
+      {
+          mlfqs_load_avg();
+          mlfqs_recent_cpu_all();
       }
-    }
   }
-  thread_wakeup(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
