@@ -82,20 +82,6 @@ typedef int tid_t;
    blocked state is on a semaphore wait list. */
 struct thread
   {
-    int nice;
-    int recent_cpu;
-
-    //!!!!!!!!!!!!ADDED!!!!!!!!!!!!
-    int priority_backup;
-    struct list donations;
-    struct list_elem donation_elem;
-    struct lock *waiting_lock;
-
-    
-    /* !!!!!!!! ADDED !!!!!!!!! */
-    int64_t waiting_time;
-    
-
     /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
@@ -103,6 +89,21 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+
+
+    /* Variable for avoiding busy-waiting. */
+    int64_t wake_time;
+
+    /* Variables for mlfqs. */
+    int nice;
+    int recent_cpu;
+
+    /* Variables for priority donation. */
+    int priority_backup;
+    struct list donations;
+    struct list_elem donation_elem;
+    struct lock* waiting_lock;
+
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -152,20 +153,20 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-/* !!!!!!! ADDED !!!!!!!!! */
-void thread_sleep (int64_t);
-void thread_wakeup (int64_t);
-// !!!!!!!!!!!ADDED!!!!!!!!!!!!
-bool compare_priority(const struct list_elem *a,
-		const struct list_elem *b,
-		void *aux);
+/* Additional functions for avoiding busy-waiting. */
+void thread_sleep(int64_t);
+void thread_wake(int64_t);
 
-void mlfqs_priority(struct thread *t);
-void mlfqs_recent_cpu(struct thread *t);
+/* Additional functions for priroty schedulling. */
+bool compare_priority(struct list_elem* a, struct list_elem* b, void* aux);
+void thread_check_preemption(void);
+
+/* Additional functions for mlfqs. */
+void mlfqs_priority(struct thread* t);
+void mlfqs_recent_cpu(struct thread* t);
 void mlfqs_load_avg();
 void mlfqs_increment();
 void mlfqs_priority_all();
 void mlfqs_recent_cpu_all();
-
 
 #endif /* threads/thread.h */

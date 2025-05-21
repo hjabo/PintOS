@@ -41,15 +41,11 @@ void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
 
-
-// !!!!!!!!!!!ADDED!!!!!!!!!!!!
-bool compare_sema_priority(const struct list_elem *a,
-			const struct list_elem *b,
-			void *aux);
-bool compare_donation(const struct list_elem *a,
-			const struct list_elem *b,
-			void *aux);
+/* Additional functions for priority scheduling and donation. */
+bool compare_sema_priority(const struct list_elem* a, const struct list_elem* b, void* aux);
+bool compare_donation(const struct list_elem* a, const struct list_elem* b, void* aux);
 void priority_donation();
+
 /* Optimization barrier.
 
    The compiler will not reorder operations across an
