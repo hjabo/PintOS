@@ -27,6 +27,7 @@ void syscall_handler(struct intr_frame *f UNUSED){
 void
 syscall_init (void) 
 {
+  printf("%
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
