@@ -18,6 +18,7 @@ void syscall_handler (struct intr_frame *f UNUSED){
       thread_exit();
   }
 }
+
 void exit(int status){
   const char *name = thread_current()->name;
   char process_name[32];
