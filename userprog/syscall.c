@@ -22,9 +22,12 @@ struct file
 struct file* getfile(int fd);
 void check_user_vaddr(const void* vaddr);
 
+struct lock filesys_lock;
+
 void
 syscall_init (void) 
 {
+  lock_init(&filesys_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -41,7 +44,7 @@ void sys_seek(int fd, unsigned position);
 unsigned sys_tell(int fd);
 void sys_close(int fd);
 int sys_read(int fd,const void *buffer, unsigned size);
-
+struct thread* get_child_process(int tid);
 
 void syscall_handler(struct intr_frame *f){
   uint32_t syscall_number = *((uint32_t *)f->esp);
@@ -146,8 +149,11 @@ int sys_open(const char* file){
   if(file == NULL)
     sys_exit(-1);
   check_user_vaddr(file);
+
+  lock_acquire(&filesys_lock);
   struct file* return_file = filesys_open(file);
   if (return_file == NULL){
+    lock_release(&filesys_lock);
     return -1;
   }else{
     int i;
@@ -157,6 +163,7 @@ int sys_open(const char* file){
         if(strcmp(thread_current()->name,file)==false)
           file_deny_write(return_file);
         thread_current()->fd[i]=return_file;
+        lock_release(&filesys_lock);
         return i;
       }
     }
@@ -196,16 +203,23 @@ void sys_close(int fd){
 int sys_read(int fd,const void *buffer, unsigned size){
   check_user_vaddr(buffer);
   check_user_vaddr(buffer+size-1);
+
+  lock_acquire(&filesys_lock);
   if(fd==0){
     int i;
     for(i=0;i<size;i++){
       if(((char*)buffer)[i]=='\0') break;
     }
+    lock_release(&filesys_lock);
     return i;
   }else{
     struct file* f = getfile(fd);
-    if(f==NULL) sys_exit(-1);
+    if(f==NULL){
+      lock_release(&filesys_lock);
+      sys_exit(-1);
+    }
     else {
+      lock_release(&filesys_lock);
       return file_read(f,buffer,size);
     }
   }
@@ -214,13 +228,20 @@ int sys_read(int fd,const void *buffer, unsigned size){
 int sys_write(int fd, const void *buffer, unsigned size){
   check_user_vaddr(buffer);
   check_user_vaddr(buffer+size-1);
+
+  lock_acquire(&filesys_lock);
   if(fd==1){
     putbuf(buffer,size);
+    lock_release(&filesys_lock);
     return size;
   }else{
     struct file* f = getfile(fd);
-    if(f==NULL) sys_exit(-1);
+    if(f==NULL){
+      lock_release(&filesys_lock);
+      sys_exit(-1);
+    }
     if(f->deny_write) file_deny_write(f);
+    lock_release(&filesys_lock);
     return file_write(f,buffer,size);
   }
 }
@@ -231,4 +252,16 @@ struct file* getfile(int fd){
 
 void check_user_vaddr(const void* vaddr){
   if(!is_user_vaddr(vaddr)) sys_exit(-1);
+}
+
+struct thread* get_child_process(int tid){
+  struct thread *cur = thread_current();
+  struct list_elem* e = list_begin(&cur->child);
+  for(;e!=list_end(&cur->child);e=list_next(e)){
+    struct thread* child = list_entry(e,struct thread,child_elem);
+    if(child->tid = tid){
+      return child;
+    }
+  }
+  return NULL;
 }

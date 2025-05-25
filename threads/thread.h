@@ -115,6 +115,9 @@ struct thread
 	struct list_elem child_elem;
 	struct semaphore child_lock;
 	struct semaphore mem_lock;
+	struct semaphore load_lock;
+	struct thread* parent;
+	bool load_failed;
 	struct file* fd[128];
 #endif
 
