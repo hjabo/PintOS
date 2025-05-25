@@ -118,7 +118,13 @@ void sys_exit(int status){
 }
 int sys_exec(const char *file){
   check_user_vaddr(file);
-  return process_execute(file);
+  int size = strlen(file)+1;
+  char *fn_copy = palloc_get_page(0);
+  if(fn_copy == NULL){
+    sys_exit(-1);
+  }
+  strlcpy(fn_copy,file,size);
+  return process_execute(fn_copy);
 }	
 int sys_wait(int pid){
   check_user_vaddr(pid);
