@@ -76,9 +76,18 @@ int sys_wait(int pid){
   return process_wait(pid);
 }
 bool sys_create(const char *file, unsigned initial_size){
+  if(file==NULL)
+    sys_exit(-1);
+  if(!is_user_vaddr(file))
+    sys_exit(-1);
+ 
   return filesys_create(file,initial_size);
 }
 bool sys_remove(const char *file){
+  if(file==NULL)
+    sys_exit(-1);
+  if(!is_user_vaddr(file))
+    sys_exit(-1);
   return filesys_remove(file);
 }
 
