@@ -47,8 +47,10 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+  if (tid == TID_ERROR){
     palloc_free_page (fn_copy); 
+    return TID_ERROR;
+  }
   return tid;
 }
 
@@ -155,7 +157,7 @@ process_wait (tid_t child_tid)
   struct thread *cur = thread_current();
   struct list_elem* e = list_begin(&cur->child);
   for(;e!=list_end(&cur->child);e=list_next(e)){
-    struct thread *child = list_entry(e,struct thread,child_elem);
+    struct thread* child = list_entry(e,struct thread,child_elem);
     if(child->tid == child_tid){
       sema_down(&child->child_lock);
       int exit_status = child->exit_status;

@@ -21,7 +21,13 @@ int sys_exec(const char *file);
 int sys_wait(int pid);
 bool sys_create(const char *file, unsigned initial_size);
 bool sys_remove(const char *file);
-static int sys_write(int fd, const void *buffer, unsigned size);
+int sys_write(int fd, const void *buffer, unsigned size);
+int sys_open(const char* file);
+int sys_filesize(int fd);
+void sys_seek(int fd, unsigned position);
+unsigned sys_tell(int fd);
+void sys_close(int fd);
+int sys_read(int fd,const void *buffer, unsigned size);
 
 
 void syscall_handler(struct intr_frame *f){
@@ -29,19 +35,12 @@ void syscall_handler(struct intr_frame *f){
   switch(syscall_number){
     case SYS_HALT:
       sys_halt();
+      break;
     case SYS_EXIT:
       sys_exit(*(int*)(f->esp+4));
       break;
-    case SYS_WRITE:
-      {
-        int fd = *(int*)(f->esp+4);
-        void* buffer = (void *)*(int*)(f->esp+8);
-        unsigned size = *(unsigned*)(f->esp+12);
-        f->eax = sys_write(fd,buffer,size);
-      }
-      break;
     case SYS_EXEC:
-      f->eax = sys_exec(*(int *)(f->esp+4));
+      f->eax = sys_exec((const char*)*(int *)(f->esp+4));
       break;
     case SYS_WAIT:
       f->eax = sys_wait(*(int *)(f->esp+4));
@@ -51,6 +50,41 @@ void syscall_handler(struct intr_frame *f){
       break;
     case SYS_REMOVE:
       f->eax = sys_remove((const char*)*(int *)(f->esp+4));
+      break;
+    case SYS_OPEN:
+      f->eax = sys_open((const char*)*(int *)(f->esp+4));
+      break;
+    case SYS_FILESIZE:
+      f->eax = sys_filesize(*(int *)(f->esp+4));
+      break;
+    case SYS_READ:
+      {
+        int fd = *(int*)(f->esp+4);
+        void* buffer = (void *)*(int*)(f->esp+8);
+        unsigned size = *(unsigned*)(f->esp+12);
+        f->eax = sys_read(fd,buffer,size);
+      }
+      break;
+    case SYS_WRITE:
+      {
+        int fd = *(int*)(f->esp+4);
+        void* buffer = (void *)*(int*)(f->esp+8);
+        unsigned size = *(unsigned*)(f->esp+12);
+        f->eax = sys_write(fd,buffer,size);
+      }
+      break;
+    case SYS_SEEK:
+      {
+        int fd = *(int*)(f->esp+4);
+        unsigned position = *(unsigned*)(f->esp+8);
+        sys_seek(fd,position);
+      }
+      break;
+    case SYS_TELL:
+      f->eax = sys_tell(*(int*)(f->esp+4));
+      break;
+    case SYS_CLOSE:
+      sys_close(*(int*)(f->esp+4));
       break;
     default:
       sys_exit(-1);
@@ -70,6 +104,8 @@ void sys_exit(int status){
   thread_exit();
 }
 int sys_exec(const char *file){
+  if(!is_user_vaddr(file))
+    sys_exit(-1);
   return process_execute(file);
 }
 int sys_wait(int pid){
@@ -80,7 +116,6 @@ bool sys_create(const char *file, unsigned initial_size){
     sys_exit(-1);
   if(!is_user_vaddr(file))
     sys_exit(-1);
- 
   return filesys_create(file,initial_size);
 }
 bool sys_remove(const char *file){
@@ -90,8 +125,29 @@ bool sys_remove(const char *file){
     sys_exit(-1);
   return filesys_remove(file);
 }
-
-static int sys_write(int fd, const void *buffer, unsigned size){
+int sys_open(const char* file){
+  if(!is_user_vaddr(file))
+    sys_exit(-1);
+  //NOT IMP
+}
+int sys_filesize(int fd){
+  //NOT IMP
+}
+void sys_seek(int fd, unsigned position){
+  //not imp
+}
+unsigned sys_tell(int fd){
+//not imp
+}
+void sys_close(int fd){
+//not imp
+}
+int sys_read(int fd,const void *buffer, unsigned size){
+  if(!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size-1))
+    sys_exit(-1);
+//not imp
+}
+int sys_write(int fd, const void *buffer, unsigned size){
   if(fd!=1&&fd!=2)
     return -1;
   if(!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size-1))
