@@ -9,51 +9,78 @@
 #include "userprog/process.h"
 #include "filesys/filesys.h"
 
-void syscall_handler(struct intr_frame *f UNUSED){
-  printf("syscall_handler called!\n");
-  int status = *((int *)f->esp + 1);
-  switch(*(int *)f->esp){
-    case SYS_HALT:
-    case SYS_EXIT:
-      exit(status);
-      break;
-    case SYS_EXEC:
-    case SYS_WAIT:
-    default:
-      exit(-1);
-  }
-}
+static void syscall_handler(struct intr_frame *);
 
+void sys_halt(void);
+void sys_exit(int status);
+int sys_exec(const char *file);
+int sys_wait(int pid);
+bool sys_create(const char *file, unsigned initial_size);
+bool sys_remove(const char *file);
+int sys_write(int fd, const void *buffer, unsigned size);
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-void halt(void){
+static void syscall_handler(struct intr_frame *f UNUSED){
+  int syscall_number = *((int *)f->esp);
+  printf("[][] syscall_handler entered. syscall number = %d\n",syscall_number);
+  switch(syscall_number){
+    case SYS_HALT:
+      sys_halt();
+    case SYS_EXIT:
+      sys_exit(*((int *)f->esp+1));
+      break;
+    case SYS_EXEC:
+      f->eax = sys_exec(*((int *)f->esp+1));
+      break;
+    case SYS_WAIT:
+      f->eax = sys_wait(*((int *)f->esp+1));
+      break;
+    case SYS_CREATE:
+//      f->eax = sys_create((const char*)*((int *)f->esp+1), (unsigned)*((int *)f->esp+2));
+      break;
+    case SYS_REMOVE:
+//      f->eax = sys_remove((const char*)*((int *)f->esp+1));
+      break;
+    case SYS_WRITE:
+      sys_write((int)*((int *)f->esp+5), (void *)*((int *)f->esp+6), (unsigned)*((int *)f->esp+7));
+    default:
+      sys_exit(-1);
+  }
+}
+
+
+
+void sys_halt(void){
   shutdown();
 }
-void exit(int status){
-  printf("exit called with %d\n",status);
+void sys_exit(int status){
   struct thread *cur = thread_current();
-  char name[32];
-  strlcpy(name, cur->name,sizeof name);
-  char *save_ptr;
-  char *program_name = strtok_r(name," ",&save_ptr);
-  printf("%s: exit(%d)\n",thread_name(),status);
+  printf("%s: exit(%d)\n",thread_name(),status);	
+  cur->exit_status = status;
   thread_exit();
 }
-int exec(const char *file){
+int sys_exec(const char *file){
   return process_execute(file);
 }
-int wait(int pid){
+int sys_wait(int pid){
   return process_wait(pid);
 }
-bool create(const char *file, unsigned initial_size){
+bool sys_create(const char *file, unsigned initial_size){
   return filesys_create(file,initial_size);
 }
-bool remove(const char *file){
+bool sys_remove(const char *file){
   return filesys_remove(file);
 }
 
+int sys_write(int fd, const void *buffer, unsigned size){
+  if(fd==1){
+    putbuf(buffer,size);
+    return size;
+  }
+  return -1;
+}
 

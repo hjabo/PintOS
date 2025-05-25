@@ -2,5 +2,12 @@
 #define USERPROG_SYSCALL_H
 
 void syscall_init (void);
-void syscall_handler (struct intr_frame *f);
+
+
+void sys_halt(void);
+void sys_exit(int status);
+int sys_exec(const char *file);
+int sys_wait(int pid);
+bool sys_create(const char *file, unsigned initial_size);
+bool sys_remove(const char *file);
 #endif /* userprog/syscall.h */
