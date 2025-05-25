@@ -117,6 +117,10 @@ void sys_exit(int status){
   struct thread* cur = thread_current();	
   printf("%s: exit(%d)\n",cur->name,status);
   cur->exit_status = status;
+  int i;
+  for (i=3;i<128;i++){
+    if(cur->fd[i]!=NULL) sys_close(i);
+  }
   thread_exit();
 }
 int sys_exec(const char *file){
@@ -128,6 +132,7 @@ int sys_exec(const char *file){
   }
   strlcpy(fn_copy,file,size);
   int tid = process_execute(fn_copy);
+  palloc_free_page(fn_copy);
   return tid;
 }	
 int sys_wait(int pid){
@@ -138,13 +143,15 @@ bool sys_create(const char *file, unsigned initial_size){
   if(file==NULL)
     sys_exit(-1);
   check_user_vaddr(file);
-  return filesys_create(file,initial_size);
+  int create_result = filesys_create(file,initial_size);
+  return create_result;
 }
 bool sys_remove(const char *file){
   if(file==NULL)
     sys_exit(-1);
   check_user_vaddr(file);
-  return filesys_remove(file);
+  int remove_result = filesys_remove(file);
+  return remove_result;
 }
 int sys_open(const char* file){
   if(file == NULL)
@@ -161,48 +168,50 @@ int sys_open(const char* file){
     for (i=3;i<128;i++){
       if(getfile(i)==NULL)
       {
-        if(strcmp(thread_current()->name,file)==false){
+        if(strcmp(thread_current()->name,file)==false)
           file_deny_write(return_file);
-        }
         thread_current()->fd[i]=return_file;
         lock_release(&filesys_lock);
         return i;
       }
     }
   }
+  lock_release(&filesys_lock);
   return -1;
 }
 int sys_filesize(int fd){
   struct file* f = getfile(fd);
-  if(f==NULL)
+  if(f==NULL){
     sys_exit(-1);
-  else
-    return file_length(f);
+  }else{
+    int filesize_result = file_length(f);
+    return filesize_result;
+  }
 }
 void sys_seek(int fd, unsigned position){
   struct file* f = getfile(fd);
-  if(f==NULL)
+  if(f==NULL){
     sys_exit(-1);
-  else
-    return file_seek(f,position);
+  }else{
+    file_seek(f,position);
+  }
 }
 unsigned sys_tell(int fd){
   struct file* f = getfile(fd);
-  if(f==NULL)
+  if(f==NULL){
     sys_exit(-1);
-  else
-    return file_tell(f);
+  }else{
+    unsigned tell_result = file_tell(f);
+    return tell_result;
+  }
 }
 void sys_close(int fd){
-  lock_acquire(&filesys_lock);
   struct file* f = getfile(fd);
   if(f==NULL){
-    lock_release(&filesys_lock);
     sys_exit(-1);
   }else{
     file_close(f);
     thread_current()->fd[fd]=NULL;
-    lock_release(&filesys_lock);
   }
 }
 int sys_read(int fd,const void *buffer, unsigned size){
@@ -224,8 +233,9 @@ int sys_read(int fd,const void *buffer, unsigned size){
       sys_exit(-1);
     }
     else {
+      int read_result = file_read(f,buffer,size);
       lock_release(&filesys_lock);
-      return file_read(f,buffer,size);
+      return read_result;
     }
   }
 }
@@ -245,9 +255,12 @@ int sys_write(int fd, const void *buffer, unsigned size){
       lock_release(&filesys_lock);
       sys_exit(-1);
     }
-    if(f->deny_write) file_deny_write(f);
+    if(f->deny_write){
+      file_deny_write(f);
+    }
+    int write_result = file_write(f,buffer,size);
     lock_release(&filesys_lock);
-    return file_write(f,buffer,size);
+    return write_result;
   }
 }
 

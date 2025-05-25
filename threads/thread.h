@@ -117,8 +117,8 @@ struct thread
 	struct semaphore mem_lock;
 	struct semaphore load_lock;
 	struct thread* parent;
-	bool load_failed;
 	struct file* fd[128];
+    bool lock_failed;
 #endif
 
     /* Owned by thread.c. */
