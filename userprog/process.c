@@ -76,6 +76,7 @@ start_process (void *file_name_)
   char* file_name_to_count = malloc(strlen(file_name)+1);
   strlcpy(file_name_to_count, file_name, strlen(file_name)+1);
   ptr = file_name_to_count;
+
   do{
     token = strtok_r(ptr," ",&rest);
     argc++;
@@ -87,13 +88,13 @@ start_process (void *file_name_)
   char** argv;
   argv = (char**)malloc(sizeof(char*) * argc);
   ptr = file_name;
+  
   for(i=0; i<argc; i++){
     token = strtok_r(ptr," ",&rest);
     argv[i] = token;
     ptr = rest;
   }
-
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (argv[0], &if_.eip, &if_.esp);
 
   if(success){
     void** esp = &if_.esp;
@@ -159,7 +160,7 @@ process_wait (tid_t child_tid)
     if(child->tid == child_tid){
       sema_down(&child->child_lock);
       int exit_status = child->exit_status;
-      list_remove(&child->child_elem);
+      list_remove(&child->child_elem);	
       sema_up(&child->mem_lock);
       return exit_status;
     }

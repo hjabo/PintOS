@@ -6,8 +6,21 @@
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "filesys/off_t.h"
+#include "devices/block.h"
 
 void syscall_handler(struct intr_frame *);
+
+struct file
+{
+  struct inode* inode;
+  off_t pos;
+  bool deny_write;
+};
+
+struct file* getfile(int fd);
+void check_user_vaddr(const void* vaddr);
 
 void
 syscall_init (void) 
@@ -36,7 +49,8 @@ void syscall_handler(struct intr_frame *f){
     case SYS_HALT:
       sys_halt();
       break;
-    case SYS_EXIT:
+    case SYS_EXIT:  
+      check_user_vaddr(*(int*)(f->esp+4));
       sys_exit(*(int*)(f->esp+4));
       break;
     case SYS_EXEC:
@@ -98,61 +112,117 @@ void sys_halt(void){
 }
 void sys_exit(int status){
   struct thread* cur = thread_current();	
-
   printf("%s: exit(%d)\n",cur->name,status);
   cur->exit_status = status;
   thread_exit();
 }
 int sys_exec(const char *file){
-  if(!is_user_vaddr(file))
-    sys_exit(-1);
+  check_user_vaddr(file);
   return process_execute(file);
-}
+}	
 int sys_wait(int pid){
+  check_user_vaddr(pid);
   return process_wait(pid);
 }
 bool sys_create(const char *file, unsigned initial_size){
   if(file==NULL)
     sys_exit(-1);
-  if(!is_user_vaddr(file))
-    sys_exit(-1);
+  check_user_vaddr(file);
   return filesys_create(file,initial_size);
 }
 bool sys_remove(const char *file){
   if(file==NULL)
     sys_exit(-1);
-  if(!is_user_vaddr(file))
-    sys_exit(-1);
+  check_user_vaddr(file);
   return filesys_remove(file);
 }
 int sys_open(const char* file){
-  if(!is_user_vaddr(file))
+  if(file == NULL)
     sys_exit(-1);
-  //NOT IMP
+  check_user_vaddr(file);
+  struct file* return_file = filesys_open(file);
+  if (return_file == NULL){
+    return -1;
+  }else{
+    int i;
+    for (i=3;i<128;i++){
+      if(getfile(i)==NULL)
+      {
+        if(strcmp(thread_current()->name,file)==false)
+          file_deny_write(return_file);
+        thread_current()->fd[i]=return_file;
+        return i;
+      }
+    }
+  }
+  return -1;
 }
 int sys_filesize(int fd){
-  //NOT IMP
+  struct file* f = getfile(fd);
+  if(f==NULL)
+    sys_exit(-1);
+  else
+    return file_length(f);
 }
 void sys_seek(int fd, unsigned position){
-  //not imp
+  struct file* f = getfile(fd);
+  if(f==NULL)
+    sys_exit(-1);
+  else
+    return file_seek(f,position);
 }
 unsigned sys_tell(int fd){
-//not imp
+  struct file* f = getfile(fd);
+  if(f==NULL)
+    sys_exit(-1);
+  else
+    return file_tell(f);
 }
 void sys_close(int fd){
-//not imp
+  struct file* f = getfile(fd);
+  if(f==NULL)
+    sys_exit(-1);
+  else{
+    file_close(f);
+    thread_current()->fd[fd]=NULL;
+  }
 }
 int sys_read(int fd,const void *buffer, unsigned size){
-  if(!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size-1))
-    sys_exit(-1);
-//not imp
-}
-int sys_write(int fd, const void *buffer, unsigned size){
-  if(fd!=1&&fd!=2)
-    return -1;
-  if(!is_user_vaddr(buffer) || !is_user_vaddr(buffer+size-1))
-    sys_exit(-1);
-  putbuf(buffer,size);
-  return size;
+  check_user_vaddr(buffer);
+  check_user_vaddr(buffer+size-1);
+  if(fd==0){
+    int i;
+    for(i=0;i<size;i++){
+      if(((char*)buffer)[i]=='\0') break;
+    }
+    return i;
+  }else{
+    struct file* f = getfile(fd);
+    if(f==NULL) sys_exit(-1);
+    else {
+      return file_read(f,buffer,size);
+    }
+  }
 }
 
+int sys_write(int fd, const void *buffer, unsigned size){
+  check_user_vaddr(buffer);
+  check_user_vaddr(buffer+size-1);
+  if(fd==1){
+    putbuf(buffer,size);
+    return size;
+  }else{
+    struct file* f = getfile(fd);
+    if(f==NULL) sys_exit(-1);
+    if(f->deny_write) file_deny_write(f);
+    return file_write(f,buffer,size);
+  }
+}
+
+struct file* getfile(int fd){
+  return (thread_current()->fd[fd]);
+}
+
+void check_user_vaddr(const void* vaddr){
+  if(!is_user_vaddr(vaddr)) sys_exit(-1);
+}

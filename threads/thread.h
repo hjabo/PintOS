@@ -115,6 +115,7 @@ struct thread
 	struct list_elem child_elem;
 	struct semaphore child_lock;
 	struct semaphore mem_lock;
+	struct file* fd[128];
 #endif
 
     /* Owned by thread.c. */
