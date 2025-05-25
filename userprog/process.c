@@ -38,8 +38,18 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  /////////////////////////////////////////////////////////////////// ADDED
+
+  char* tempptr;
+  char* token = strtok_r(file_name, " ", &tempptr);
+
+  if (filesys_open(token) == NULL)
+      return -1;
+
+  /////////////////////////////////////////////////////////////////// ADDED DONE
+  
+  /* Create a new thread to execute command. */
+  tid = thread_create (token, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -59,7 +69,92 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+
+  /////////////////////////////////////////////////////////////////// ADDED
+  /* Count tokens. */
+  char* ptr;
+  char* rest;
+  char* token;
+  int argc = 0;
+  int i;
+
+  char* file_name_to_count = malloc(strlen(file_name) + 1);
+  strlcpy(file_name_to_count, file_name, strlen(file_name) + 1);
+
+  ptr = file_name_to_count;
+
+ do 
+ {
+      token = strtok_r(ptr, " ", &rest);
+      argc++;
+      ptr = rest;
+ } 
+ while (token != NULL);
+
+ argc--;
+ free(file_name_to_count);
+
+ /* Save argv. */
+ char** argv;
+ argv = (char**)malloc(sizeof(char*) * argc);
+ ptr = file_name;
+
+ for (i = 0; i < argc; i++)
+ {
+     token = strtok_r(ptr, " ", &rest);
+     argv[i] = token;
+     ptr = rest;
+ }
+
+ success = load (argv[0], &if_.eip, &if_.esp);
+
+ /* Push to stack. */
+ if (success)
+ {
+     void** esp = &if_.esp;
+     int length = 0;
+
+     /* Push command to stack. */
+     for (i = argc - 1; i >= 0; i--)
+     {
+         length = strlen(argv[i]) + 1;
+         *esp -= length;
+         memcpy(*esp, argv[i], length);
+         argv[i] = *esp;
+     }
+
+     /* Push word-align finished. */
+     while ((PHYS_BASE - *esp) % 4 != 0) {
+         *esp -= sizeof(uint8_t);
+         **(uint8_t**)esp = 0;
+     }
+
+     /* Push NULL. */
+     *esp -= 4;
+     *(uint8_t*)(*esp) = 0;
+
+     /* Push addresses of argv. */
+     for (i = argc - 1; i >= 0; i--)
+     {
+         *esp -= sizeof(uint32_t**);
+         *(uint32_t**)*esp = argv[i];
+     }
+
+     /* Push start address of argv. */
+     *esp -= sizeof(uint32_t**);
+     *(uint32_t*)*esp = *esp + 4;
+
+     /* Push value of argc. */
+     *esp -= sizeof(uint32_t);
+     *(uint32_t*)*esp = argc;
+
+     /* Push return address. */
+     *esp -= 4;
+     *(uint32_t*)*esp = 0;
+
+     free(argv);
+ }
+ /////////////////////////////////////////////////////////////////// ADDED DONE
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -88,7 +183,25 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+    /////////////////////////////////////////////////////////////////// ADDED
+
+    struct list_elem* e;
+    struct thread* t = NULL;
+    int exit_status;
+
+    for (e = list_begin(&(thread_current()->child)); e != list_end(&(thread_current()->child)); e = list_next(e)) {
+        t = list_entry(e, struct thread, child_elem);
+        if (child_tid == t->tid) {
+            sema_down(&(t->child_lock));
+            exit_status = t->exit_status;
+            list_remove(&(t->child_elem));
+            sema_up(&(t->mem_lock));
+            return exit_status;
+        }
+    }
+    return -1;
+
+    /////////////////////////////////////////////////////////////////// ADDED DONE
 }
 
 /* Free the current process's resources. */
@@ -114,6 +227,13 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+  /////////////////////////////////////////////////////////////////// ADDED
+
+  sema_up(&(cur->child_lock));
+  sema_down(&(cur->mem_lock));
+
+  /////////////////////////////////////////////////////////////////// ADDED DONE
 }
 
 /* Sets up the CPU for running user code in the current

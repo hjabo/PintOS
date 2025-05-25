@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
+#include "filesys/file.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -90,20 +92,7 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-
-    /* Variable for avoiding busy-waiting. */
-    int64_t wake_time;
-
-    /* Variables for mlfqs. */
-    int nice;
-    int recent_cpu;
-
-    /* Variables for priority donation. */
-    int priority_backup;
-    struct list donations;
-    struct list_elem donation_elem;
-    struct lock* waiting_lock;
-
+    int64_t wake_time;                   /* Time for the thread to wake up. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -111,6 +100,11 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct semaphore child_lock;
+    struct semaphore mem_lock; /* new */
+    struct list child;
+    struct list_elem child_elem;
+    int exit_status;
 #endif
 
     /* Owned by thread.c. */
@@ -153,20 +147,8 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-/* Additional functions for avoiding busy-waiting. */
+/* Additional functions to avoid busy-waiting */
 void thread_sleep(int64_t);
 void thread_wake(int64_t);
-
-/* Additional functions for priroty schedulling. */
-bool compare_priority(struct list_elem* a, struct list_elem* b, void* aux);
-void thread_check_preemption(void);
-
-/* Additional functions for mlfqs. */
-void mlfqs_priority(struct thread* t);
-void mlfqs_recent_cpu(struct thread* t);
-void mlfqs_load_avg();
-void mlfqs_increment();
-void mlfqs_priority_all();
-void mlfqs_recent_cpu_all();
 
 #endif /* threads/thread.h */
