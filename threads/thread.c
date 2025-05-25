@@ -519,6 +519,12 @@ init_thread (struct thread *t, const char *name, int priority)
   /* Added for mlfqs. */
   t->nice = 0;
   t->recent_cpu = 0;
+
+#ifdef USERPROG
+  sema_init(&(t->wait_child_sema),0);
+  list_init(&(t->child));
+  list_push_back(&(running_thread()->child),&(t->child_elem));
+#endif
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
