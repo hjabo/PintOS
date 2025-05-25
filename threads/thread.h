@@ -113,7 +113,8 @@ struct thread
 	int exit_status;
 	struct list child;
 	struct list_elem child_elem;
-	struct semaphore wait_child_sema;
+	struct semaphore child_lock;
+	struct semaphore mem_lock;
 #endif
 
     /* Owned by thread.c. */

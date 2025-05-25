@@ -521,8 +521,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->recent_cpu = 0;
 
 #ifdef USERPROG
-  sema_init(&(t->wait_child_sema),0);
-  list_init(&(t->child));
+  sema_init(&t->child_lock,0);
+  sema_init(&t->mem_lock,0);
+  list_init(&t->child);
   list_push_back(&(running_thread()->child),&(t->child_elem));
 #endif
 }
