@@ -479,6 +479,9 @@ init_thread (struct thread *t, const char *name, int priority)
   list_push_back (&all_list, &t->allelem);
 
 #ifdef USERPROG
+    int i;
+    for (i = 0; i < 128; i++)
+        t->fd[i] = NULL;
     sema_init(&(t->child_lock), 0);
     sema_init(&(t->mem_lock), 0);
     list_init(&(t->child));
