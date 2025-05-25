@@ -127,7 +127,8 @@ int sys_exec(const char *file){
     sys_exit(-1);
   }
   strlcpy(fn_copy,file,size);
-  return process_execute(fn_copy);
+  int tid = process_execute(fn_copy);
+  return tid;
 }	
 int sys_wait(int pid){
   check_user_vaddr(pid);
@@ -160,8 +161,9 @@ int sys_open(const char* file){
     for (i=3;i<128;i++){
       if(getfile(i)==NULL)
       {
-        if(strcmp(thread_current()->name,file)==false)
+        if(strcmp(thread_current()->name,file)==false){
           file_deny_write(return_file);
+        }
         thread_current()->fd[i]=return_file;
         lock_release(&filesys_lock);
         return i;
@@ -192,12 +194,15 @@ unsigned sys_tell(int fd){
     return file_tell(f);
 }
 void sys_close(int fd){
+  lock_acquire(&filesys_lock);
   struct file* f = getfile(fd);
-  if(f==NULL)
+  if(f==NULL){
+    lock_release(&filesys_lock);
     sys_exit(-1);
-  else{
+  }else{
     file_close(f);
     thread_current()->fd[fd]=NULL;
+    lock_release(&filesys_lock);
   }
 }
 int sys_read(int fd,const void *buffer, unsigned size){

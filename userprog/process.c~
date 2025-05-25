@@ -177,7 +177,6 @@ process_wait (tid_t child_tid)
     if(child->tid == child_tid){
       sema_down(&child->child_lock);
       int exit_status = child->exit_status;
-      child.parent
       list_remove(&child->child_elem);	
       sema_up(&child->mem_lock);
       return exit_status;
