@@ -101,7 +101,9 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct semaphore child_lock;
-    struct semaphore mem_lock; /* new */
+    struct semaphore mem_lock;
+    struct semaphore load_lock;
+    struct thread* parent;
     struct list child;
     struct list_elem child_elem;
     int exit_status;

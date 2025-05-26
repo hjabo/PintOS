@@ -4,6 +4,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/palloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "filesys/off_t.h"
@@ -12,18 +13,21 @@
 struct file
 {
     struct inode* inode;        /* File's inode. */
-    off_t pos;                  /* Current position. */
+    off_t pos;                        /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
 };
 
-static void syscall_handler(struct intr_frame* f);
+struct lock file_lock;
+
+void syscall_handler(struct intr_frame* f);
 struct file* getfile(int fd);
 void check_user_vaddr(const void* vaddr);
 
 void
 syscall_init (void) 
 {
-  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+    lock_init(&file_lock);
+    intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 void
@@ -74,15 +78,26 @@ syscall_handler (struct intr_frame *f)
             break;
 
         case SYS_READ:
-            check_user_vaddr(sp + 4);
-            f->eax = read((int)*(uint32_t*)(sp + 4), (void*)*(uint32_t*)(sp + 8), (unsigned)*((uint32_t*)(sp + 12)));
-            break;
+            {
+                check_user_vaddr(sp + 4);
+                //f->eax = read((int)*(uint32_t*)(sp + 4), (void*)*(uint32_t*)(sp + 8), (unsigned)*((uint32_t*)(sp + 12)));
+                int fd = *(int*)(f->esp + 4);
+                void* buffer = (void*)*(int*)(f->esp + 8);
+                unsigned size = *(unsigned*)(f->esp + 12);
+                f->eax = read(fd, buffer, size);
+                break;
+            }
 
         case SYS_WRITE:
-            check_user_vaddr(sp + 4);
-            f->eax = write((int)*(uint32_t*)(sp + 4), (void*)*(uint32_t*)(sp + 8), (unsigned)*((uint32_t*)(sp + 12)));
-            //f->eax = write(*(int*)(sp + 4), (void*)*(int*)(sp + 8), *(unsigned*)(sp + 12));
-            break;
+            {
+                check_user_vaddr(sp + 4);
+                //f->eax = write((int)*(uint32_t*)(sp + 4), (void*)*(uint32_t*)(sp + 8), (unsigned)*((uint32_t*)(sp + 12)));
+                int fd = *(int*)(f->esp + 4);
+                void* buffer = (void*)*(int*)(f->esp + 8);
+                unsigned size = *(unsigned*)(f->esp + 12);
+                f->eax = write(fd, buffer, size);
+                break;
+            }
 
         case SYS_SEEK:
             check_user_vaddr(sp + 4);
@@ -116,6 +131,11 @@ exit(int status)
 {
 	struct thread* cur = thread_current();
     cur->exit_status = status;
+    int i;
+    for (i = 3; i < 128; i++) {
+        if (cur->fd[i] != NULL)
+            close(i);
+    }
 
 	printf("%s: exit(%d)\n", cur->name, status); // Process Termination Message
 	thread_exit();
@@ -124,7 +144,13 @@ exit(int status)
 pid_t 
 exec(const char* file)
 {
-    return process_execute(file);
+    char *fn_copy = palloc_get_page(0);
+    if (fn_copy == NULL)
+        exit(-1);
+    strlcpy(fn_copy, file, PGSIZE);
+    pid_t tid = process_execute(fn_copy);
+    palloc_free_page(fn_copy);
+    return tid;
 }
 
 int
@@ -152,33 +178,26 @@ remove(const char* file)
 int
 open(const char* file)
 {
-    //printf(" SYSCALL: open \n");
     if (file == NULL)
         exit(-1);
-    check_user_vaddr(file);
-    // lock_acquire (&file_lock);
     struct file* return_file = filesys_open(file);
     if (return_file == NULL)
         return -1;
-    else
-    {
-        int i;
-        for (i = 3; i < 128; i++)
-        {
-            if (getfile(i) == NULL)
-            {
-                if (strcmp(thread_current()->name, file) == false)
-                    file_deny_write(return_file);
 
-                thread_current()->fd[i] = return_file;
-                //printf("  >> filesys_open(file) success, return %d, idx of fd", i);
-                        // lock_release (&file_lock);
-                return i;
-            }
+    lock_acquire(&file_lock);
+    int i;
+    for (i = 3; i < 128; i++)
+    {
+        if (getfile(i) == NULL)
+        {
+            if (strcmp(thread_current()->name, file) == false)
+                file_deny_write(return_file);
+            thread_current()->fd[i] = return_file;
+            lock_release (&file_lock);
+            return i;
         }
-        //printf("  >> filesys_open(file) failed ; thread's fd is full, return -1\n");
     }
-    // lock_release (&file_lock);
+    lock_release (&file_lock);
     return -1;
 }
 
@@ -196,41 +215,41 @@ int
 read(int fd, void* buffer, unsigned size)
 {
     check_user_vaddr(buffer);
-    // lock_acquire (&file_lock);
+    lock_acquire (&file_lock);
     if (fd == 0)
     {
-        /* input_getc() 를 이용해 키보드 입력을 버퍼에 넣는다. 그리고 입력된 사이즈(bytes)를 리턴한다. */
         int i;
         for (i = 0; i < size; i++)
         {
             if (((char*)buffer)[i] == '\0')
                 break;
         }
-        // lock_release (&file_lock);
+        lock_release (&file_lock);
         return i;
     }
     else
     {
         struct file* f = getfile(fd);
         if (f == NULL)
-            exit(-1);
-        else
         {
-            // lock_release (&file_lock);
-            return file_read(f, buffer, size);
+            lock_release(&file_lock);
+            exit(-1);
         }
+        int read_result = file_read(f, buffer, size);
+        lock_release(&file_lock);
+        return read_result;
     }
 }
 
 int
-write(int fd, const void* buffer, unsigned size) // 이거 내용 부정확하니까 docs 보고 다시 짜기!!
+write(int fd, const void* buffer, unsigned size)
 {
     check_user_vaddr(buffer);
-    // lock_acquire (&file_lock);
+    lock_acquire (&file_lock);
     if (fd == 1)
     {
-        /* putbuf() 함수를 이용하여 버퍼의 내용을 콘솔에 입력한다. 이 때에는 필요한 사이즈만큼 반복문을 돌아야 한다. */
         putbuf(buffer, size);
+        lock_release(&file_lock);
         return size;
     }
     else
@@ -238,15 +257,14 @@ write(int fd, const void* buffer, unsigned size) // 이거 내용 부정확하니까 docs 
         struct file* f = getfile(fd);
         if (f == NULL)
         {
-            // lock_release (&file_lock);
+            lock_release (&file_lock);
             exit(-1);
         }
         if (f->deny_write)
-        {
             file_deny_write(f);
-        }
-        // lock_release (&file_lock);
-        return file_write(f, buffer, size);
+        int write_result = file_write(f, buffer, size);
+        lock_release (&file_lock);
+        return write_result;
     }
 }
 
@@ -276,15 +294,14 @@ close(int fd)
     struct file* f = getfile(fd);
     if (f == NULL)
         exit(-1);
-    else
-    {
-        file_close(f);
-        thread_current()->fd[fd] = NULL;
-    }
+    lock_acquire(&file_lock);
+    file_close(f);
+    thread_current()->fd[fd] = NULL;
+    lock_release(&file_lock);
 }
 
-struct file
-    * getfile(int fd)
+struct file* 
+getfile(int fd)
 {
     return (thread_current()->fd[fd]);
 }
@@ -292,8 +309,6 @@ struct file
 void
 check_user_vaddr(const void* vaddr)
 {
-    // ASSERT(is_user_vaddr(vaddr)); 
-    // 이거 ASSERT로 하면 프로세스가 -1로 종료되지 않아서 테스트케이스 통과 안함
     if (!is_user_vaddr(vaddr))
         exit(-1);
 }

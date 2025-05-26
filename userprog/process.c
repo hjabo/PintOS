@@ -49,9 +49,25 @@ process_execute (const char *file_name)
   /////////////////////////////////////////////////////////////////// ADDED DONE
   
   /* Create a new thread to execute command. */
+  struct thread* cur = thread_current();
   tid = thread_create (token, PRI_DEFAULT, start_process, fn_copy);
+  sema_down(&cur->load_lock);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+
+  /////////////////////////////////////////////////////////////////// ADDED
+
+  struct list_elem* iter = NULL;
+  struct thread* elem = NULL;
+  for (iter = list_begin(&(cur->child)); iter != list_end(&(cur->child)); iter = list_next(iter))
+  {
+      elem = list_entry(iter, struct thread, child_elem);
+      if (elem->exit_status == -1)
+          return process_wait(tid);
+  }
+
+  /////////////////////////////////////////////////////////////////// ADDED DONE
+
   return tid;
 }
 
@@ -107,6 +123,7 @@ start_process (void *file_name_)
  }
 
  success = load (argv[0], &if_.eip, &if_.esp);
+ sema_up(&thread_current()->parent->load_lock);
 
  /* Push to stack. */
  if (success)
@@ -151,15 +168,15 @@ start_process (void *file_name_)
      /* Push return address. */
      *esp -= 4;
      *(uint32_t*)*esp = 0;
-
-     free(argv);
  }
  /////////////////////////////////////////////////////////////////// ADDED DONE
 
-  /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  free(argv);
+
+  /* If load failed, quit. */
+  if (!success)
+      exit(-1);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in

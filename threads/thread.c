@@ -484,6 +484,8 @@ init_thread (struct thread *t, const char *name, int priority)
         t->fd[i] = NULL;
     sema_init(&(t->child_lock), 0);
     sema_init(&(t->mem_lock), 0);
+    sema_init(&(t->load_lock), 0);
+    t->parent = running_thread();
     list_init(&(t->child));
     list_push_back(&(running_thread()->child), &(t->child_elem));
 #endif
