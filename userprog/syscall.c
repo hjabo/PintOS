@@ -80,22 +80,14 @@ syscall_handler (struct intr_frame *f)
         case SYS_READ:
             {
                 check_user_vaddr(sp + 4);
-                //f->eax = read((int)*(uint32_t*)(sp + 4), (void*)*(uint32_t*)(sp + 8), (unsigned)*((uint32_t*)(sp + 12)));
-                int fd = *(int*)(f->esp + 4);
-                void* buffer = (void*)*(int*)(f->esp + 8);
-                unsigned size = *(unsigned*)(f->esp + 12);
-                f->eax = read(fd, buffer, size);
+                f->eax = read((int)*(uint32_t*)(sp + 4), (void*)*(uint32_t*)(sp + 8), (unsigned)*((uint32_t*)(sp + 12)));
                 break;
             }
 
         case SYS_WRITE:
             {
                 check_user_vaddr(sp + 4);
-                //f->eax = write((int)*(uint32_t*)(sp + 4), (void*)*(uint32_t*)(sp + 8), (unsigned)*((uint32_t*)(sp + 12)));
-                int fd = *(int*)(f->esp + 4);
-                void* buffer = (void*)*(int*)(f->esp + 8);
-                unsigned size = *(unsigned*)(f->esp + 12);
-                f->eax = write(fd, buffer, size);
+                f->eax = write((int)*(uint32_t*)(sp + 4), (void*)*(uint32_t*)(sp + 8), (unsigned)*((uint32_t*)(sp + 12)));
                 break;
             }
 
@@ -180,11 +172,14 @@ open(const char* file)
 {
     if (file == NULL)
         exit(-1);
-    struct file* return_file = filesys_open(file);
-    if (return_file == NULL)
-        return -1;
-
+    
     lock_acquire(&file_lock);
+    struct file* return_file = filesys_open(file);
+    if (return_file == NULL) {
+        lock_release(&file_lock);
+        return -1;
+    }
+
     int i;
     for (i = 3; i < 128; i++)
     {
@@ -193,11 +188,11 @@ open(const char* file)
             if (strcmp(thread_current()->name, file) == false)
                 file_deny_write(return_file);
             thread_current()->fd[i] = return_file;
-            lock_release (&file_lock);
+            lock_release(&file_lock);
             return i;
         }
     }
-    lock_release (&file_lock);
+    lock_release(&file_lock);
     return -1;
 }
 
@@ -215,7 +210,7 @@ int
 read(int fd, void* buffer, unsigned size)
 {
     check_user_vaddr(buffer);
-    lock_acquire (&file_lock);
+    lock_acquire(&file_lock);
     if (fd == 0)
     {
         int i;
@@ -224,7 +219,7 @@ read(int fd, void* buffer, unsigned size)
             if (((char*)buffer)[i] == '\0')
                 break;
         }
-        lock_release (&file_lock);
+        lock_release(&file_lock);
         return i;
     }
     else
@@ -235,9 +230,8 @@ read(int fd, void* buffer, unsigned size)
             lock_release(&file_lock);
             exit(-1);
         }
-        int read_result = file_read(f, buffer, size);
         lock_release(&file_lock);
-        return read_result;
+        return file_read(f, buffer, size);
     }
 }
 
@@ -245,7 +239,7 @@ int
 write(int fd, const void* buffer, unsigned size)
 {
     check_user_vaddr(buffer);
-    lock_acquire (&file_lock);
+    lock_acquire(&file_lock);
     if (fd == 1)
     {
         putbuf(buffer, size);
@@ -257,14 +251,13 @@ write(int fd, const void* buffer, unsigned size)
         struct file* f = getfile(fd);
         if (f == NULL)
         {
-            lock_release (&file_lock);
+            lock_release(&file_lock);
             exit(-1);
         }
         if (f->deny_write)
             file_deny_write(f);
-        int write_result = file_write(f, buffer, size);
-        lock_release (&file_lock);
-        return write_result;
+        lock_release(&file_lock);
+        return file_write(f, buffer, size);
     }
 }
 
@@ -291,10 +284,12 @@ tell(int fd)
 void
 close(int fd)
 {
-    struct file* f = getfile(fd);
-    if (f == NULL)
-        exit(-1);
     lock_acquire(&file_lock);
+    struct file* f = getfile(fd);
+    if (f == NULL) {
+        lock_release(&file_lock);
+        exit(-1);
+    }
     file_close(f);
     thread_current()->fd[fd] = NULL;
     lock_release(&file_lock);

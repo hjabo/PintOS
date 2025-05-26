@@ -57,13 +57,13 @@ process_execute (const char *file_name)
 
   /////////////////////////////////////////////////////////////////// ADDED
 
-  struct list_elem* iter = NULL;
-  struct thread* elem = NULL;
-  for (iter = list_begin(&(cur->child)); iter != list_end(&(cur->child)); iter = list_next(iter))
-  {
-      elem = list_entry(iter, struct thread, child_elem);
-      if (elem->exit_status == -1)
+  struct list_elem* e;
+  struct thread* t = NULL;
+  for (e = list_begin(&cur->child); e != list_end(&cur->child); e = list_next(e)) {
+      t = list_entry(e, struct thread, child_elem);
+      if (t->exit_status == -1) {
           return process_wait(tid);
+      }
   }
 
   /////////////////////////////////////////////////////////////////// ADDED DONE
