@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
+
+#include "vm/page.h"
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -121,6 +123,9 @@ struct thread
     bool lock_failed;
 #endif
 
+#ifdef VM
+    struct hash spt; //supplemental page table
+#endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

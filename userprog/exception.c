@@ -6,6 +6,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "vm/page.h"
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -150,6 +152,16 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   if(!user || is_kernel_vaddr(fault_addr) || not_present) sys_exit(-1);
+
+#if VM
+  struct page *p = page_lookup(&thread_current()->spt,fault_addr);
+  if(p==NULL){
+      sys_exit(-1);
+  }
+  if(!p->loaded && !vm_load_page(p,thread_current()->pagedir)){
+      sys_exit(-1);
+  }
+#endif
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */

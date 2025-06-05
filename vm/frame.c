@@ -1,0 +1,73 @@
+#include <hash.h>
+#include <list.h>
+#include "threads/vaddr.h"
+#include "threads/palloc.h"
+#include "threads/malloc.h"
+#include "threads/thread.h"
+#include "vm/frame.h"
+
+static struct lock frame_lock;
+static struct hash frame_map;
+static struct list frame_list;
+static struct list_elem *clock_ptr;
+
+struct frame_table_entry{
+	void *kpage;
+	struct hash_elem h_elem;
+	struct list_elem l_elem;
+	void *upage;
+	struct thread *t;
+	bool pinned;
+};
+
+
+static void vm_frame_free_without_lock(void *kpage, bool free_page);
+
+void* vm_frame_allocate (enum palloc_flags flags, void *upage){
+	lock_acquire(&frame_lock);
+	void *p = palloc_get_page(PAL_USER | flags);
+	if(p == NULL) {
+		//page alloc fail
+		//swap out page. need implement.
+	}
+	struct frame_table_entry *frame = malloc(sizeof(struct frame_table_entry));
+	if(frame == NULL){
+		lock_release(&frame_lock);
+		return NULL;
+	}
+	frame->t = thread_current();
+	frame->upage = upage;
+	frame->kpage = p;
+	frame->pinned = true;
+	
+	hash_insert(&frame_map, &frame->h_elem);
+	list_push_back(&frame_list, &frame->l_elem);
+
+	lock_release(&frame_lock);
+	return p;
+}
+
+void vm_frame_free(void *kpage){
+	lock_acquire(&frame_lock);
+	vm_frame_free_without_lock(kpage,true);
+	lock_release(&frame_lock);
+}
+
+static void vm_frame_free_without_lock(void *kpage, bool free_page){
+	struct frame_table_entry f_temp;
+	f_temp.kpage = kpage;
+	struct hash_elem *h = hash_find(&frame_map, &(f_temp.h_elem));
+	if(h==NULL){
+		//page not stored in table
+		PANIC("Page is not stored");
+	}
+	
+	struct frame_table_entry *f;
+	f = hash_entry(h, struct frame_table_entry, h_elem);
+
+	hash_delete(&frame_map, &f->h_elem);
+	list_remove(&f->l_elem);
+
+	if(free_page) palloc_free_page(kpage);
+	free(f);		
+}

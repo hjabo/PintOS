@@ -1,0 +1,6 @@
+#ifndef VM_SWAP_H
+#define VM_SWAP_H
+
+void vm_swap_init(void);
+uint32_t vm_swap_out (void *page);
+void vm_swap_in (uint32_t swap_index, void *page);

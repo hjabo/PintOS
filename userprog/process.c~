@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "vm/page.h"
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -143,8 +144,6 @@ start_process (void *file_name_)
   if (!success) {
     thread_current()->lock_failed = true;
     sys_exit(-1);
-  }else{
-    thread_current()->lock_failed = false;
   }
     
 
@@ -491,6 +490,24 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
+#ifdef VM
+      struct page *p =malloc(sizeof *p);
+      if (p==NULL)
+        return false;
+      p->upage = upage;
+      p->file = file;
+      p->file_offset = ofs;
+      p->read_bytes = page_read_bytes;
+      p->zero_bytes = page_zero_bytes;
+      p->writable = writable;
+      p->type = PAGE_FILE;
+      p->loaded = false;
+
+      if(!page_insert(thread_current()->spt,p)){
+        free(p);
+        return false;
+      }
+#else
       /* Get a page of memory. */
       uint8_t *kpage = palloc_get_page (PAL_USER);
       if (kpage == NULL)
@@ -510,11 +527,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           palloc_free_page (kpage);
           return false; 
         }
-
+#endif
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+#ifdef VM
+      ofs += page_read_bytes;
+#endif
     }
   return true;
 }

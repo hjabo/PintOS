@@ -9,7 +9,7 @@ include ../Make.vars
 include ../../tests/Make.tests
 
 # Compiler and assembler options.
-kernel.bin: CPPFLAGS += -I$(SRCDIR)/lib/kernel
+kernel.bin: CPPFLAGS += -I$(SRCDIR)/lib/kernel -w
 
 # Core kernel.
 threads_SRC  = threads/start.S		# Startup code.
@@ -63,6 +63,8 @@ userprog_SRC += userprog/tss.c		# TSS management.
 
 # No virtual memory code yet.
 #vm_SRC = vm/file.c			# Some file.
+vm_SRC = vm/page.c
+vm_SRC += vm/frame.c
 
 # Filesystem code.
 filesys_SRC  = filesys/filesys.c	# Filesystem core.

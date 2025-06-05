@@ -1,0 +1,78 @@
+#include "vm/page.h"
+#include "vm/frame.h"
+#include "userprog/pagedir.h"
+#include "threads/thread.h"
+#include "threads/malloc.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include <string.h>
+
+void page_table_init(struct hash *page_table){
+	hash_init(page_table,page_hash_func,page_less_func,NULL);
+}
+
+
+bool page_insert(struct hash *page_table, struct page *p) {
+	struct hash_elem *prev = hash_insert(page_table, &p->hash_elem);
+	return prev == NULL;
+}
+
+struct page *page_lookup(struct hash *page_table, void *addr){
+	struct page p;
+	p.upage = pg_round_down(addr);
+	struct hash_elem *e = hash_find(page_table, &p.hash_elem);
+	if(e== NULL) return NULL;
+	return hash_entry(e, struct page, hash_elem);
+}
+
+void page_table_destroy(struct hash *page_table){
+	hash_destroy(page_table, page_destroy_func);
+}
+
+void page_destroy_func(struct hash_elem *e, void *aux UNUSED){
+	struct page *p = hash_entry(e, struct page, hash_elem);
+	free(p);
+	//need to implement 'swap' and 'frame'.
+}
+
+unsigned page_hash_func(const struct hash_elem *e, void *aux UNUSED){
+	struct page *p = hash_entry(e, struct page, hash_elem);
+	return hash_bytes(&p->upage, sizeof p->upage);
+}
+
+bool page_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux){
+	struct page *pa = hash_entry(a, struct page, hash_elem);
+	struct page *pb = hash_entry(b, struct page, hash_elem);
+	return pa->upage < pb->upage;
+}
+
+bool vm_load_page(struct page *p, uint32_t, *pagedir){
+	ASSERT(p!=NULL);
+	ASSERT(!p->loaded);
+
+	uint8_t *kpage = vm_frame_allocate(PAL_USER, p->upage);
+	if(kpage == NULL)
+		return false;
+
+	if(p->type == PAGE_FILE){
+		file_seek(p->file, p->file_offset);
+		int bytes_read = file_read(p->file,kpage,p->read_bytes);
+		if(bytes_read != (int)p->read_bytes){
+			vm_frame_free(kpage);
+			return false;
+		}
+		memset(kpage + p->read_bytes, 0, p->zero_bytes);
+	} else{
+		//swap....
+	}
+	
+	if(!pagedir_set_page(pagedir, p->upage,kpage,p->writable)){
+		vm_frame_free(kpage);
+		return false;
+	}
+
+	p->kpage = kpage;
+	p->loaded = true;
+	return true;
+}
+
