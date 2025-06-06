@@ -21,6 +21,7 @@
 #ifdef VM
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "userprog/syscall.h"
 #endif
 
 static thread_func start_process NO_RETURN;
@@ -230,6 +231,7 @@ process_wait (tid_t child_tid)
     /////////////////////////////////////////////////////////////////// ADDED DONE
 }
 
+
 /* Free the current process's resources. */
 void
 process_exit (void)
@@ -238,6 +240,15 @@ process_exit (void)
   uint32_t *pd;
 
 #ifdef VM
+  struct list *mmap_list = &cur->mmap_list;
+  struct list_elem *e;
+  while(!list_empty(mmap_list)){
+    e = list_begin(mmap_list);
+    struct mmap_entry *mmap_e = list_entry(e, struct mmap_entry, elem);
+    if(mmap_e->mapid!=NULL){
+      munmap(mmap_e->mapid);
+    }
+  }
   hash_destroy(&cur->spt, page_destructor);
 #endif
 

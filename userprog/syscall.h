@@ -3,7 +3,8 @@
 
 #include "lib/user/syscall.h"
 #include "filesys/off_t.h"
-
+#include <stddef.h>
+#include <list.h>
 struct file
 {
     struct inode* inode;        /* File's inode. */
@@ -11,6 +12,15 @@ struct file
     bool deny_write;            /* Has file_deny_write() been called? */
 };
 
+#ifdef VM
+struct mmap_entry{
+  int mapid;
+  struct file *file;
+  void *start_addr;
+  size_t length;
+  struct list_elem elem;
+};
+#endif
 struct lock file_lock;
 
 void syscall_init (void);
@@ -29,4 +39,6 @@ void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
 
+int mmap(int fd, void *vaddr);
+void munmap(int mapid);
 #endif /* userprog/syscall.h */

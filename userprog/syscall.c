@@ -9,6 +9,7 @@
 #include "filesys/file.h"
 #include "devices/block.h"
 #include "vm/page.h"
+#include "vm/frame.h"
 void syscall_handler(struct intr_frame* f);
 struct file* getfile(int fd);
 void check_user_vaddr(const void* vaddr);
@@ -290,15 +291,8 @@ check_user_vaddr(const void* vaddr)
         exit(-1);
 }
 
-
 //--------------ADDED--------------
-struct mmap_entry{
-	int mapid;
-	struct file *file;
-	void *start_addr;
-	size_t length;
-	struct list_elem elem;
-};
+
 int mmap(int fd, void *vaddr){
   if (!vaddr || pg_ofs(vaddr) != 0 || fd<= 1) return -1;
   struct thread *cur = thread_current();
@@ -333,7 +327,10 @@ int mmap(int fd, void *vaddr){
     p->vaddr=upage;
     p->file = file;
     p->read_bytes = page_read_bytes;
+    p->offset = offset;
     p->writable = true;
+    p->status = IN_DISK;
+
     if(hash_insert(&cur->spt,&p->hash_elem) != NULL){
       free(p);
       lock_release(&file_lock);
@@ -346,7 +343,10 @@ int mmap(int fd, void *vaddr){
   }
 
   struct mmap_entry *mmap = malloc(sizeof *mmap);
-  if(mmap== NULL) return -1;
+  if(mmap== NULL){
+    lock_release(&file_lock);
+    return -1;
+  }
 
   mmap->file = file;
   mmap->start_addr = vaddr;
@@ -357,30 +357,46 @@ int mmap(int fd, void *vaddr){
   }
   mmap->mapid = mapid;
   list_push_back(&cur->mmap_list,&mmap->elem);
-  lock_release(&file_lock);
 
+  lock_release(&file_lock);
   return mapid;
 }
 
 void munmap(int mapid){
   struct thread *cur = thread_current();
   if(mapid == NULL) return;
+
   lock_acquire(&file_lock);
+
   struct list_elem *e = list_begin(&cur->mmap_list);
   for(;e!=list_end(&cur->mmap_list);e=list_next(e)){
     struct mmap_entry *mmap_e = list_entry(e,struct mmap_entry,elem);
     if(mmap_e->mapid == mapid){
+
       void *upage =mmap_e->start_addr;
       size_t length = mmap_e->length;		
       while(length>0){
 	size_t page_read_bytes = length <PGSIZE ? length : PGSIZE;
 	struct page *p = page_find(&cur->spt,upage);
 	if(p != NULL){
-          if(pagedir_is_dirty(cur->pagedir, p->vaddr)){
-	    file_write_at(p->file,p->vaddr,p->read_bytes,p->offset);
+          if(p->status == IN_FRAME && p->frame != NULL){
+            if(pagedir_is_dirty(cur->pagedir, p->vaddr) ||
+		pagedir_is_dirty(cur->pagedir, p->frame->paddr)){
+              file_write_at(p->file,p->frame->paddr,p->read_bytes,p->offset);
+            }
+
+            free_frame(p->frame);
+          }else if(p->status == IN_SWAP){
+            if(pagedir_is_dirty(cur->pagedir,p->vaddr)){
+//              void *page_temp = palloc_get_page(0);
+//              swap_get(page_temp);
+//TODO SWAP
+//              file_write_at(p->file,page_temp,PGSIZE,p->offset);
+//              palloc_free_page(page_temp);
+            }else{
+              //swap free
+            }
           }
-	  pagedir_clear_page(cur->pagedir,p->vaddr);
-//	  vm_frame_free(p->kpage);
 	  hash_delete(&cur->spt,&p->hash_elem);
 	  free(p);
 	}

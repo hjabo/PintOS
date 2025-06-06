@@ -4,7 +4,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
-
+#include "vm/frame.h"
 /* hash function, address comparator */
 /* Returns a hash value for page p. */
 unsigned
@@ -29,6 +29,7 @@ void
 page_destructor(struct hash_elem* e, void* aux UNUSED)
 {
     struct page* p = hash_entry(e, struct page, hash_elem);
+
     if (p->frame != NULL) {
         struct frame_entry* f = p->frame;
         p->frame = NULL;

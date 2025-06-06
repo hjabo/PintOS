@@ -15,5 +15,4 @@ void frame_init(size_t);
 struct frame_entry* get_frame(void);
 struct frame_entry* frame_get_multiple(size_t);
 void free_frame(struct frame_entry*);
-
 #endif /* vm/frame.h */
