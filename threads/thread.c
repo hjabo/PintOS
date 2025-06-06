@@ -28,10 +28,6 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
-/* List of processes in sleep, that is, processes
-   that are sleeping and wait to be waked. */
-static struct list sleep_list;
-
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -96,9 +92,6 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-
-  /* Additional list init to avoid busy-waiting. */
-  list_init(&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -489,6 +482,10 @@ init_thread (struct thread *t, const char *name, int priority)
     list_init(&(t->child));
     list_push_back(&(running_thread()->child), &(t->child_elem));
 #endif
+
+#ifdef VM
+    t->stack_pages = 0;
+#endif
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -604,43 +601,3 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
-
-/* Additional functions to avoid busy-waiting. */
-void
-thread_sleep(int64_t ticks)
-{
-    struct thread* cur = thread_current();
-    enum intr_level old_level;
-
-    ASSERT(!intr_context());
-    ASSERT(cur != idle_thread);
-
-    old_level = intr_disable();
-
-    list_push_back(&sleep_list, &cur->elem);
-    cur->wake_time = ticks;
-    thread_block();
-
-    intr_set_level(old_level);
-}
-
-void thread_wake(int64_t ticks)
-{
-    struct list_elem* e, * next;
-    struct thread* t;
-
-    if (!list_empty(&sleep_list))
-    {
-        for (e = list_begin(&sleep_list); e != list_end(&sleep_list); e = next)
-        {
-            t = list_entry(e, struct thread, elem);
-            next = list_next(e);
-
-            if (t->wake_time - ticks <= 0)
-            {
-                list_remove(e);
-                thread_unblock(t);
-            }
-        }
-    }
-}

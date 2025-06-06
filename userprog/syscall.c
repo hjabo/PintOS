@@ -7,17 +7,7 @@
 #include "threads/palloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
-#include "filesys/off_t.h"
 #include "devices/block.h"
-
-struct file
-{
-    struct inode* inode;        /* File's inode. */
-    off_t pos;                        /* Current position. */
-    bool deny_write;            /* Has file_deny_write() been called? */
-};
-
-struct lock file_lock;
 
 void syscall_handler(struct intr_frame* f);
 struct file* getfile(int fd);

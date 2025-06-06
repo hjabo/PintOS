@@ -6,6 +6,9 @@
 #include <stdint.h>
 #include "threads/synch.h"
 #include "filesys/file.h"
+#ifdef VM
+#include <hash.h>
+#endif
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -92,8 +95,6 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    int64_t wake_time;                   /* Time for the thread to wake up. */
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -108,6 +109,12 @@ struct thread
     struct list_elem child_elem;
     int exit_status;
     struct file* fd[128];
+#endif
+
+#ifdef VM
+    /* Supplemental page table made with hash table. */
+    struct hash spt;
+    uint32_t stack_pages;
 #endif
 
     /* Owned by thread.c. */
@@ -149,9 +156,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
-/* Additional functions to avoid busy-waiting */
-void thread_sleep(int64_t);
-void thread_wake(int64_t);
 
 #endif /* threads/thread.h */
