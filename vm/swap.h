@@ -1,9 +1,12 @@
 #ifndef VM_SWAP_H
 #define VM_SWAP_H
 
-void vm_swap_init(void);
-uint32_t vm_swap_out (void *page);
-void vm_swap_in (uint32_t swap_index, void *page);
-void vm_swap_free(uint32_t swap_index);
+#include "vm/frame.h"
+#include "vm/page.h"
 
-#endif
+void swap_init(void);
+void swap_insert(struct page*);
+void swap_get(struct page*);
+void swap_free(struct page*);
+
+#endif /* vm/swap.h */

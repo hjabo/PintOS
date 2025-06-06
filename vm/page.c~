@@ -1,5 +1,6 @@
 #include "vm/page.h"
 #include "vm/frame.h"
+#include "vm/swap.h"
 #include "userprog/pagedir.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
@@ -31,8 +32,12 @@ void page_table_destroy(struct hash *page_table){
 
 void page_destroy_func(struct hash_elem *e, void *aux UNUSED){
 	struct page *p = hash_entry(e, struct page, hash_elem);
+	if(p->kpage != NULL){
+		vm_frame_remove(p->kpage);
+	}else if(p->type =PAGE_SWAP){
+		vm_swap_free(p->swap_index);
+	}
 	free(p);
-	//need to implement 'swap' and 'frame'.
 }
 
 unsigned page_hash_func(const struct hash_elem *e, void *aux UNUSED){
@@ -46,24 +51,29 @@ bool page_less_func(const struct hash_elem *a, const struct hash_elem *b, void *
 	return pa->upage < pb->upage;
 }
 
-bool vm_load_page(struct page *p, uint32_t, *pagedir){
-	ASSERT(p!=NULL);
-	ASSERT(!p->loaded);
+bool vm_load_page(struct page *p, uint32_t *pagedir){
+	if(p == NULL) return false;
+	if(p->loaded == true) return true; //already loaded
 
 	uint8_t *kpage = vm_frame_allocate(PAL_USER, p->upage);
 	if(kpage == NULL)
 		return false;
-
-	if(p->type == PAGE_FILE){
-		file_seek(p->file, p->file_offset);
-		int bytes_read = file_read(p->file,kpage,p->read_bytes);
-		if(bytes_read != (int)p->read_bytes){
-			vm_frame_free(kpage);
-			return false;
-		}
-		memset(kpage + p->read_bytes, 0, p->zero_bytes);
-	} else{
-		//swap....
+	switch(p->type){
+		case PAGE_ZERO:
+			memset(kpage,0,PGSIZE);
+			break;
+		case PAGE_SWAP:
+			vm_swap_in(p->swap_index, kpage);
+			break;
+		case PAGE_FILE:
+			file_seek(p->file, p->file_offset);
+			int bytes_read = file_read(p->file,kpage,p->read_bytes);
+			if(bytes_read != (int)p->read_bytes){
+				vm_frame_free(kpage);
+				return false;
+			}
+			memset(kpage + p->read_bytes, 0, p->zero_bytes);
+			break;
 	}
 	
 	if(!pagedir_set_page(pagedir, p->upage,kpage,p->writable)){
@@ -73,6 +83,18 @@ bool vm_load_page(struct page *p, uint32_t, *pagedir){
 
 	p->kpage = kpage;
 	p->loaded = true;
+	pagedir_set_dirty(pagedir,kpage,false);
 	return true;
 }
 
+
+bool vm_install_zeropage(struct hash *page_table, void *upage){
+	struct page *new_p =malloc(sizeof *new_p);
+      	new_p->upage = upage;
+	new_p->type = PAGE_ZERO;
+	new_p->loaded = false;
+	if(hash_insert(&page_table,&new_p->elem) == NULL){
+		return true;
+	}
+	return false;
+}

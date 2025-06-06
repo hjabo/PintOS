@@ -22,6 +22,7 @@ struct frame_table_entry{
 
 
 static void vm_frame_free_without_lock(void *kpage, bool free_page);
+
 void* vm_frame_allocate (enum palloc_flags flags, void *upage){
 	lock_acquire(&frame_lock);
 	void *p = palloc_get_page(PAL_USER | flags);
@@ -69,4 +70,11 @@ static void vm_frame_free_without_lock(void *kpage, bool free_page){
 
 	if(free_page) palloc_free_page(kpage);
 	free(f);		
+}
+
+
+void vm_frame_remove(void *kpage){
+	lock_acquire(&frame_lock);
+	vm_frame_free_without_lock(kpage,false);
+	lock_release(&frame_lock);
 }

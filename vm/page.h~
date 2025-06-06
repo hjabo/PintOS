@@ -18,6 +18,7 @@ struct page {
 
 	struct file *file;
 	off_t file_offset;
+	uint32_t swap_index;
 	size_t read_bytes;
 	size_t zero_bytes;
 	bool writable;
@@ -35,6 +36,7 @@ void page_destroy_func(struct hash_elem *e, void *aux);
 unsigned page_hash_func(const struct hash_elem *e, void *aux);
 bool page_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
-bool vm_load_page(struct page *p, uint32_t *pagedir)
+bool vm_load_page(struct page *p, uint32_t *pagedir);
 
+bool vm_install_zeropage(struct hash *h,void *upage);
 #endif

@@ -5,6 +5,11 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
+#include "filesys/file.h"
+#ifdef VM
+#include <hash.h>
+#endif
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -90,40 +95,28 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-
-    /* Variable for avoiding busy-waiting. */
-    int64_t wake_time;
-
-    /* Variables for mlfqs. */
-    int nice;
-    int recent_cpu;
-
-    /* Variables for priority donation. */
-    int priority_backup;
-    struct list donations;
-    struct list_elem donation_elem;
-    struct lock* waiting_lock;
-
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-	int exit_status;
-	struct list child;
-	struct list_elem child_elem;
-	struct semaphore child_lock;
-	struct semaphore mem_lock;
-	struct semaphore load_lock;
-	struct thread* parent;
-	struct file* fd[128];
-    bool lock_failed;
+    struct semaphore child_lock;
+    struct semaphore mem_lock;
+    struct semaphore load_lock;
+    struct thread* parent;
+    struct list child;
+    struct list_elem child_elem;
+    int exit_status;
+    struct file* fd[128];
 #endif
 
 #ifdef VM
-    struct hash spt; //supplemental page table
+    /* Supplemental page table made with hash table. */
+    struct hash spt;
+    uint32_t stack_pages;
 #endif
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -163,21 +156,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
-/* Additional functions for avoiding busy-waiting. */
-void thread_sleep(int64_t);
-void thread_wake(int64_t);
-
-/* Additional functions for priroty schedulling. */
-bool compare_priority(struct list_elem* a, struct list_elem* b, void* aux);
-void thread_check_preemption(void);
-
-/* Additional functions for mlfqs. */
-void mlfqs_priority(struct thread* t);
-void mlfqs_recent_cpu(struct thread* t);
-void mlfqs_load_avg();
-void mlfqs_increment();
-void mlfqs_priority_all();
-void mlfqs_recent_cpu_all();
 
 #endif /* threads/thread.h */

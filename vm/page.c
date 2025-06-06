@@ -1,78 +1,56 @@
 #include "vm/page.h"
-#include "vm/frame.h"
-#include "userprog/pagedir.h"
+#include <stdio.h>
+#include <stdint.h>
 #include "threads/thread.h"
-#include "threads/malloc.h"
-#include "threads/palloc.h"
 #include "threads/vaddr.h"
-#include <string.h>
+#include "threads/malloc.h"
 
-void page_table_init(struct hash *page_table){
-	hash_init(page_table,page_hash_func,page_less_func,NULL);
+/* hash function, address comparator */
+/* Returns a hash value for page p. */
+unsigned
+page_hash(const struct hash_elem* p_, void* aux UNUSED)
+{
+    const struct page* p = hash_entry(p_, struct page, hash_elem);
+    return hash_bytes(&p->vaddr, sizeof p->vaddr);
 }
 
+/* Returns true if page a precedes page b. */
+bool
+page_less(const struct hash_elem* a_, const struct hash_elem* b_,
+    void* aux UNUSED)
+{
+    const struct page* a = hash_entry(a_, struct page, hash_elem);
+    const struct page* b = hash_entry(b_, struct page, hash_elem);
 
-bool page_insert(struct hash *page_table, struct page *p) {
-	struct hash_elem *prev = hash_insert(page_table, &p->hash_elem);
-	return prev == NULL;
+    return pg_no(a->vaddr) < pg_no(b->vaddr);
 }
 
-struct page *page_lookup(struct hash *page_table, void *addr){
-	struct page p;
-	p.upage = pg_round_down(addr);
-	struct hash_elem *e = hash_find(page_table, &p.hash_elem);
-	if(e== NULL) return NULL;
-	return hash_entry(e, struct page, hash_elem);
+void
+page_destructor(struct hash_elem* e, void* aux UNUSED)
+{
+    struct page* p = hash_entry(e, struct page, hash_elem);
+    if (p->frame != NULL) {
+        struct frame_entry* f = p->frame;
+        p->frame = NULL;
+        free_frame(f);
+    }
+    if (p->block_sector != -1)
+        swap_free(p);
+    free(p);
 }
 
-void page_table_destroy(struct hash *page_table){
-	hash_destroy(page_table, page_destroy_func);
+/* Function to search the hash table. */
+/* Returns the page containing the given virtual address, */
+/* or a null pointer if no such page exists. */
+struct page*
+page_find(struct hash* spt, void* va)
+{
+    struct page page;
+    struct hash_elem* e;
+
+    page.vaddr = pg_round_down(va);
+
+    e = hash_find(spt, &page.hash_elem);
+
+    return e != NULL ? hash_entry(e, struct page, hash_elem) : NULL;
 }
-
-void page_destroy_func(struct hash_elem *e, void *aux UNUSED){
-	struct page *p = hash_entry(e, struct page, hash_elem);
-	free(p);
-	//need to implement 'swap' and 'frame'.
-}
-
-unsigned page_hash_func(const struct hash_elem *e, void *aux UNUSED){
-	struct page *p = hash_entry(e, struct page, hash_elem);
-	return hash_bytes(&p->upage, sizeof p->upage);
-}
-
-bool page_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux){
-	struct page *pa = hash_entry(a, struct page, hash_elem);
-	struct page *pb = hash_entry(b, struct page, hash_elem);
-	return pa->upage < pb->upage;
-}
-
-bool vm_load_page(struct page *p, uint32_t *pagedir){
-	ASSERT(p!=NULL);
-	ASSERT(!p->loaded);
-
-	uint8_t *kpage = vm_frame_allocate(PAL_USER, p->upage);
-	if(kpage == NULL)
-		return false;
-
-	if(p->type == PAGE_FILE){
-		file_seek(p->file, p->file_offset);
-		int bytes_read = file_read(p->file,kpage,p->read_bytes);
-		if(bytes_read != (int)p->read_bytes){
-			vm_frame_free(kpage);
-			return false;
-		}
-		memset(kpage + p->read_bytes, 0, p->zero_bytes);
-	} else{
-		//swap....
-	}
-	
-	if(!pagedir_set_page(pagedir, p->upage,kpage,p->writable)){
-		vm_frame_free(kpage);
-		return false;
-	}
-
-	p->kpage = kpage;
-	p->loaded = true;
-	return true;
-}
-

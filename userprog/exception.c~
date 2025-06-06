@@ -154,11 +154,17 @@ page_fault (struct intr_frame *f)
   if(!user || is_kernel_vaddr(fault_addr) || not_present) sys_exit(-1);
 
 #if VM
+  void* fault_page = (void*) pg_round_down(fault_addr);
   struct page *p = page_lookup(&thread_current()->spt,fault_addr);
-  if(p==NULL){
-      sys_exit(-1);
+  
+  void* esp = user ? f->esp : thread_current()->recent_esp;
+  if((esp <= fault_addr || fault_addr == f->esp - 4 || fault_addr == f->esp-32)
+	&&(PHYS_BASE - 0x800000 <= fault_addr && fault_addr <PHYS_BASE)){
+    if(p==NULL)
+      vm_install_zeropage(&thread_current()->spt,fault_page);
+      p = page_lookup(&thread_current()->spt,fault_page);
   }
-  if(!p->loaded && !vm_load_page(p,thread_current()->pagedir,fault_page)){
+  if(!p->loaded && !vm_load_page(p,thread_current()->pagedir)){
       sys_exit(-1);
   }
 #endif
