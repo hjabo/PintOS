@@ -164,20 +164,23 @@ page_fault (struct intr_frame *f)
 
   if (fault_addr == NULL || is_kernel_vaddr(fault_addr)) 
   {
+      //printf("Page fault at invalid address: fault_addr=%p, kernel_vaddr=%d\n", fault_addr, is_kernel_vaddr(fault_addr));
+      //PANIC("wtf");
       exit(-1);
   }
 
   struct page* p = page_find(&t->spt, fault_addr);
 
   if (p == NULL) {
-      /* If fault_addr is outside of stack range, exit. */
+      /* If fault_addr is outside of stack range (invalid), exit. */
       char* esp = f->esp;
       if ((fault_addr > PHYS_BASE) || (fault_addr < PHYS_BASE - 0x800000) ||
           (fault_addr > (void*)(esp + 32)) || (fault_addr < (void*)(esp - 32))) 
       {
           exit(-1);
       }
-      /* Grow stack page */
+
+      /* Grow stack page. */
       char* current_stack = PHYS_BASE - (t->stack_pages * PGSIZE);
       char* new_page_addr = (char*) pg_round_down(fault_addr);
       for (; new_page_addr < current_stack; new_page_addr += PGSIZE) {
@@ -194,14 +197,13 @@ page_fault (struct intr_frame *f)
 
           t->stack_pages++;
           if (t->stack_pages > 2048) {
-              /* Exceeded stack limit */
               exit(-1);
           }
 
           struct frame_entry* stack_frame = get_frame();
           stack_frame->page_addr = nsp;
 
-          /* Install */
+          /* Install. */
           if (!(pagedir_get_page(t->pagedir, nsp->vaddr) == NULL
               && pagedir_set_page(t->pagedir, nsp->vaddr, stack_frame->paddr, nsp->writable)))
               PANIC("Error growing stack page!");

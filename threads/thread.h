@@ -115,6 +115,10 @@ struct thread
     /* Supplemental page table made with hash table. */
     struct hash spt;
     uint32_t stack_pages;
+
+    /* For mmap. */
+    struct list mmap_list;
+    int mapid_allocator;
 #endif
 
     /* Owned by thread.c. */

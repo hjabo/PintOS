@@ -1,6 +1,7 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
+#include <list.h>
 #include "lib/user/syscall.h"
 #include "filesys/off_t.h"
 
@@ -28,5 +29,20 @@ int write(int fd, const void* buffer, unsigned length);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+
+#ifdef VM
+
+struct mmap_entry {
+    mapid_t mapid;
+    struct page** page_addrs;
+    int pg_cnt;
+    struct file* file;
+    struct list_elem elem;
+};
+
+mapid_t mmap(int fd, void* addr);
+void munmap(mapid_t);
+
+#endif
 
 #endif /* userprog/syscall.h */

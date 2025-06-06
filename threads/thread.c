@@ -485,6 +485,8 @@ init_thread (struct thread *t, const char *name, int priority)
 
 #ifdef VM
     t->stack_pages = 0;
+    t->mapid_allocator = 0;
+    list_init(&(t->mmap_list));
 #endif
 }
 
