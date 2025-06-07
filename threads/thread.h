@@ -116,6 +116,7 @@ struct thread
     struct hash spt;
     uint32_t stack_pages;
     struct list mmap_list;
+    int mapid_allocator;
 #endif
 
     /* Owned by thread.c. */

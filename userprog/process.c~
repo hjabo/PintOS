@@ -240,17 +240,17 @@ process_exit (void)
   uint32_t *pd;
 
 #ifdef VM
+
   struct list *mmap_list = &cur->mmap_list;
   struct list_elem *e;
   while(!list_empty(mmap_list)){
     e = list_begin(mmap_list);
     struct mmap_entry *mmap_e = list_entry(e, struct mmap_entry, elem);
-printf("[process_exit]test a\n");
     if(mmap_e->mapid!=NULL){
-printf("[process_exit]test b\n");
       munmap(mmap_e->mapid);
+    }else{
+      list_remove(e);
     }
-printf("[process_exit]test c\n");
   }
   hash_destroy(&cur->spt, page_destructor);
 #endif

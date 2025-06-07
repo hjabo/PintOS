@@ -15,5 +15,5 @@ void frame_init(size_t);
 struct frame_entry* get_frame(void);
 struct frame_entry* frame_get_multiple(size_t);
 void free_frame(struct frame_entry*);
-void free_frame_no_free_page(struct frame_entry* f);
+void free_frame_without_free_page(struct frame_entry* f);
 #endif /* vm/frame.h */

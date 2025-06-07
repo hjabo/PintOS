@@ -16,8 +16,8 @@ struct file
 struct mmap_entry{
   int mapid;
   struct file *file;
-  void *start_addr;
-  size_t length;
+  int pg_cnt;
+  struct page** page_addrs;
   struct list_elem elem;
 };
 #endif

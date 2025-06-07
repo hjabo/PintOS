@@ -3,7 +3,8 @@
 
 #include "lib/user/syscall.h"
 #include "filesys/off_t.h"
-int mmap(int fd, void *vaddr){
+#include <stddef.h>
+#include <list.h>
 struct file
 {
     struct inode* inode;        /* File's inode. */
@@ -15,9 +16,10 @@ struct file
 struct mmap_entry{
   int mapid;
   struct file *file;
-  void *start_addr;
-  size_t length;
+  int pg_cnt;
+  struct page** page_addrs;
   struct list_elem elem;
+  size_t length;
 };
 #endif
 struct lock file_lock;
