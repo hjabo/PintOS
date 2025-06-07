@@ -46,12 +46,10 @@ page_destructor(struct hash_elem* e, void* aux UNUSED)
 struct page*
 page_find(struct hash* spt, void* va)
 {
-    struct page page;
-    struct hash_elem* e;
+    struct page p_temp;
 
-    page.vaddr = pg_round_down(va);
-
-    e = hash_find(spt, &page.hash_elem);
+    p_temp.vaddr = va;
+    struct hash_elem* e = hash_find(&spt, &p_temp.hash_elem);
 
     return e != NULL ? hash_entry(e, struct page, hash_elem) : NULL;
 }

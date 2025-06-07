@@ -38,5 +38,4 @@ unsigned page_hash(const struct hash_elem*, void*);
 bool page_less(const struct hash_elem*, const struct hash_elem*, void*);
 void page_destructor(struct hash_elem*, void*);
 struct page* page_find(struct hash* spt, void* va);
-
 #endif /* vm/page.h */

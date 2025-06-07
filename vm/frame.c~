@@ -87,5 +87,5 @@ free_frame(struct frame_entry* f){
     bitmap_reset(free_frames,f->num);
     palloc_free_page(frame_table[f->num].paddr);
     f->page_addr = NULL;
-    lock_release(&frame_lock);
+      lock_release(&frame_lock);
 }

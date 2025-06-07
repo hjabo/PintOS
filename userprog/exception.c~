@@ -167,7 +167,7 @@ page_fault (struct intr_frame *f)
       exit(-1);
   }
 
-  struct page* p = page_find(&t->spt, fault_addr);
+  struct page* p = page_find(&t->spt, pg_round_down(fault_addr));
 
   if (p == NULL) {
       /* If fault_addr is outside of stack range, exit. */

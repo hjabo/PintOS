@@ -1,41 +1,65 @@
 #include "vm/swap.h"
-#include "threads/vaddr.h"
-#include "devices/block.h"
+#include <stdio.h>
+#include <stdint.h>
 #include <bitmap.h>
+#include "devices/block.h"
+#include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "threads/palloc.h"
+#include "threads/synch.h"
 
-static struct block *swap_block;
-static struct bitmap *swap_bitmap;
-static size_t swap_size;
+static struct bitmap* free_blocks;
+struct block* swap_table;
 
-void vm_swap_init(){
-	swap_block = block_get_role(BLOCK_SWAP);
+static struct lock block_lock;
 
-	swap_size = block_size(swap_block) / (PGSIZE / BLOCK_SECTOR_SIZE);
-	swap_bitmap = bitmap_create(swap_size);
-	bitmap_set_all(swap_bitmap,true);
+void
+swap_init(void)
+{
+    free_blocks = bitmap_create(1024);
+    swap_table = block_get_role(BLOCK_SWAP);
+    lock_init(&block_lock);
 }
 
-int vm_swap_out (void *page){
-	size_t swap_index = bitmap_scan(swap_bitmap,0,1,true);
+/* Insert the contents of a page into the swap table */
+void
+swap_insert(struct page* p)
+{
+    ASSERT(p->frame->paddr >= PHYS_BASE);
+    lock_acquire(&block_lock);
+    char* c = (char*) p->frame->paddr;
+    size_t sector_num = bitmap_scan_and_flip(free_blocks, 0, 1, false);
+    if (sector_num == BITMAP_ERROR)
+        PANIC("Swap space is full.");
+    p->block_sector = sector_num;
+    int i;
+    for (i = 0; i < 8; i++) {
+        block_write(swap_table, sector_num * 8 + i, c);
+        c += 512;
+    }
+    lock_release(&block_lock);
+}
 
-	size_t i;
-	for(i=0;i<(PGSIZE / BLOCK_SECTOR_SIZE);i++){
-		block_write(swap_block,
-			swap_index *(PGSIZE / BLOCK_SECTOR_SIZE) + i,
-			page + i * BLOCK_SECTOR_SIZE);
-	}
-	bitmap_set(swap_bitmap,swap_index,false);
-	return swap_index;
+/* Read from swap into the page */
+void
+swap_get(struct page* p)
+{
+    lock_acquire(&block_lock);
+    char* c = (char*) p->frame->paddr;
+    size_t read_sector = p->block_sector;
+    int i;
+    for (i = 0; i < 8; i++) {
+        block_read(swap_table, read_sector * 8 + i, c);
+        c += 512;
+    }
+    bitmap_reset(free_blocks, read_sector);
+    lock_release(&block_lock);
 }
-void vm_swap_in (int swap_index, void *page){
-	size_t i;
-	for(i=0;i<(PGSIZE / BLOCK_SECTOR_SIZE);i++){
-		block_read(swap_block,
-			swap_index *(PGSIZE / BLOCK_SECTOR_SIZE) + i,
-			page + i * BLOCK_SECTOR_SIZE);
-	}
-	bitmap_set(swap_bitmap,swap_index,true);
-}
-void vm_swap_free(uint32_t swap_index){
-	bitmap_set(swap_bitmap,swap_index,true);
+
+void
+swap_free(struct page* p)
+{
+    lock_acquire(&block_lock);
+    bitmap_reset(free_blocks, p->block_sector);
+    lock_release(&block_lock);
 }
