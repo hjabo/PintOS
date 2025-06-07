@@ -248,8 +248,6 @@ process_exit (void)
     struct mmap_entry *mmap_e = list_entry(e, struct mmap_entry, elem);
     if(mmap_e->mapid!=NULL){
       munmap(mmap_e->mapid);
-    }else{
-//      list_remove(e);
     }
   }
   hash_destroy(&cur->spt, page_destructor);

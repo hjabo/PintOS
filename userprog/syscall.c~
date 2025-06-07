@@ -316,7 +316,7 @@ getfile(int fd)
 void
 check_user_vaddr(const void* vaddr)
 {
-    if (!is_user_vaddr(vaddr))
+    if (vaddr == NULL || !is_user_vaddr(vaddr))
         exit(-1);
 }
 
@@ -389,10 +389,7 @@ int mmap(int fd, void *vaddr){
       return -1;
     }
     memset(p,0,sizeof(struct page));
-
-    p->vaddr= vaddr;
-//    printf("[MMAP] Do. page = %d\n",pg_no(p->vaddr));
-
+    p->vaddr= vaddr + PGSIZE * j;
     p->frame = NULL;
     p->status = IN_DISK;
     p->file = file;
@@ -403,12 +400,12 @@ int mmap(int fd, void *vaddr){
     p->block_sector = -1;
 
     hash_insert(&cur->spt,&p->hash_elem);
-    mmap_e->page_addrs[j++] = p;
+    mmap_e->page_addrs[j] = p;
 
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
     offset += page_read_bytes;
-    vaddr += PGSIZE;
+    j++;
   }
   list_push_back(&cur->mmap_list, &mmap_e->elem);
 
@@ -419,7 +416,7 @@ int mmap(int fd, void *vaddr){
 void munmap(int mapid){
   struct thread *cur = thread_current();
   if(mapid == NULL) return;
-
+ 
   lock_acquire(&file_lock);
 
   struct list_elem *e = list_begin(&cur->mmap_list);
@@ -445,22 +442,17 @@ void munmap(int mapid){
 }
 
 void do_unmap_page(struct hash *spt, uint32_t *pagedir, void *page, struct file *f,off_t offset, size_t bytes){
-  //printf("[MUNMAP] Do. page = %d\n",pg_no(page));
   struct page *p = page_find(spt,page);
   if(p == NULL){
-    printf("[MUNMAP] Can not find page. return\n");
     return;
   }
 
-  printf("[MUNMAP]Find page.\n");
   if(p->frame != NULL){
     if(pagedir_is_dirty(pagedir, p->vaddr) || pagedir_is_dirty(pagedir, p->frame->paddr)){
 
-      printf("[MUNMAP]Write.\n");
       file_write_at(f,p->frame->paddr,bytes,offset);
     }
     free_frame(p->frame);
-//    palloc_free_page(p->frame->paddr);
     p->frame = NULL;
   }
   pagedir_clear_page(pagedir,p->vaddr);
