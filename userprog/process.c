@@ -249,6 +249,7 @@ process_exit (void)
     if(mmap_e->mapid!=NULL){
       munmap(mmap_e->mapid);
     }else{
+      ASSERT("wtf wtf");
       list_remove(e);
     }
   }

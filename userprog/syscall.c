@@ -365,7 +365,7 @@ int mmap(int fd, void *vaddr){
       lock_release(&file_lock);
       return -1;
     }
-    p->vaddr= vaddr;
+    p->vaddr= pg_round_down(vaddr);
     p->frame = NULL;
     p->status = IN_DISK;
     p->file = file;
@@ -399,7 +399,7 @@ void munmap(int mapid){
     if(mmap_e->mapid == mapid){
       int page_index = 0;
       for(page_index = 0; page_index < mmap_e->pg_cnt; page_index += 1){
-        void *addr = mmap_e->page_addrs[page_index]->vaddr;
+        void *addr = pg_round_down(mmap_e->page_addrs[page_index]->vaddr);
         size_t offset = mmap_e->page_addrs[page_index]->offset;
         size_t bytes = mmap_e->page_addrs[page_index]->read_bytes;
         do_ummap_page(cur->spt,cur->pagedir,addr,mmap_e->file,offset,bytes);
@@ -418,15 +418,21 @@ void munmap(int mapid){
 void do_ummap_page(struct page *spt, uint32_t *pagedir, void *page, struct file *f,off_t offset, size_t bytes){
   struct page *p = page_find(&spt,page);
   if(p == NULL){
-    PANIC("[munmap] page is missing");
+//already page is unmapped(why...?)
+    return;
   }
-  if(pagedir_is_dirty(pagedir, p->vaddr) ||
-        pagedir_is_dirty(pagedir, p->frame->paddr)){
-    file_write_at(f,p->frame->paddr,bytes,offset);
-  }  	
-  free_frame(p->frame);
-  palloc_free_page(p->frame->paddr);
+
+  if(p->frame != NULL){
+    if(pagedir_is_dirty(pagedir, p->vaddr)){
+      file_write_at(f,p->frame->paddr,bytes,offset);
+    }
+    free_frame(p->frame);
+    palloc_free_page(p->frame->paddr);
+    p->frame = NULL;
+  }
+  pagedir_clear_page(pagedir,p->vaddr);
   hash_delete(spt, &p->hash_elem);
+  free(p);
   return;
 }
 
