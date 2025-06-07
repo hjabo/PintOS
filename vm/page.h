@@ -3,9 +3,7 @@
 
 #include <stdint.h>
 #include <hash.h>
-#include "threads/palloc.h"
 #include "filesys/file.h"
-#include "threads/synch.h"
 #include "vm/frame.h"
 #include "vm/swap.h"
 

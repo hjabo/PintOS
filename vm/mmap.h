@@ -3,8 +3,6 @@
 
 #include <list.h>
 
-struct lock mmap_lock;
-
 struct mmap_entry {
     int mapid;
     struct page** page_addrs;

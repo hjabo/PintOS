@@ -481,6 +481,8 @@ init_thread (struct thread *t, const char *name, int priority)
     t->parent = running_thread();
     list_init(&(t->child));
     list_push_back(&(running_thread()->child), &(t->child_elem));
+    t->exit_status = -1;
+    t->load_success = false;
 #endif
 
 #ifdef VM

@@ -31,8 +31,8 @@ page_destructor(struct hash_elem* e, void* aux UNUSED)
     struct page* p = hash_entry(e, struct page, hash_elem);
     if (p->frame != NULL) {
         struct frame_entry* f = p->frame;
-        p->frame = NULL;
         free_frame(f);
+        p->frame = NULL;
     }
     if (p->block_sector != -1)
         swap_free(p);

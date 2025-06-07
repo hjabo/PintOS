@@ -2,15 +2,15 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "userprog/gdt.h"
+#include "userprog/pagedir.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "filesys/filesys.h"
 #ifdef VM
 #include "vm/frame.h"
 #include "vm/page.h"
 #include "vm/swap.h"
-#include "userprog/pagedir.h"
-#include "userprog/syscall.h"
 #endif
 
 /* Number of page faults processed. */
@@ -160,22 +160,20 @@ page_fault (struct intr_frame *f)
 
 #ifdef VM
   struct thread* t = thread_current();
-  bool held_file_lock = lock_held_by_current_thread(&file_lock);
+  bool held_filesys_lock = lock_held_by_current_thread(&filesys_lock);
 
   if (fault_addr == NULL || is_kernel_vaddr(fault_addr)) 
-  {
-      //printf("%p Page fault at invalid address: fault_addr=%p, kernel_vaddr=%d\n", &t, fault_addr, is_kernel_vaddr(fault_addr));
-      exit(-1);
-  }
+      thread_exit();
 
   struct page* p = page_find(&t->spt, fault_addr);
 
-  if (p == NULL) {
+  if (p == NULL) 
+  {
       /* If fault_addr is outside of stack range (invalid), exit. */
       char* esp = f->esp;
       if ((fault_addr > PHYS_BASE) || (fault_addr < PHYS_BASE - 0x800000) ||
           (fault_addr > (void*)(esp + 32)) || (fault_addr < (void*)(esp - 32))) 
-          exit(-1);
+          thread_exit();
 
       /* Grow stack page. */
       char* current_stack = PHYS_BASE - (t->stack_pages * PGSIZE);
@@ -194,7 +192,11 @@ page_fault (struct intr_frame *f)
 
           t->stack_pages++;
           if (t->stack_pages > 2048)
-              exit(-1);
+          {
+              hash_delete(&t->spt, &nsp->hash_elem);
+              free(nsp);
+              thread_exit();
+          }
 
           struct frame_entry* stack_frame = get_frame();
           stack_frame->page_addr = nsp;
@@ -202,7 +204,12 @@ page_fault (struct intr_frame *f)
           /* Install. */
           if (!(pagedir_get_page(t->pagedir, nsp->vaddr) == NULL
               && pagedir_set_page(t->pagedir, nsp->vaddr, stack_frame->paddr, nsp->writable)))
-              PANIC("Error growing stack page!");
+          {
+              free_frame(f);
+              hash_delete(&t->spt, &nsp->hash_elem);
+              free(nsp);
+              thread_exit();
+          }
 
           nsp->frame = stack_frame;
       }
@@ -216,15 +223,15 @@ page_fault (struct intr_frame *f)
       uint8_t* kpage = frame->paddr;
       frame->page_addr = p;
 
-      if (!held_file_lock)
-        lock_acquire(&file_lock);
+      if (!held_filesys_lock)
+        lock_acquire(&filesys_lock);
       if (file_read_at(p->file, kpage, p->read_bytes, p->offset) != (int)p->read_bytes)
       {
-          lock_release(&file_lock);
-          exit(-1);
+          lock_release(&filesys_lock);
+          thread_exit();
       }
-      if (!held_file_lock)
-        lock_release(&file_lock);
+      if (!held_filesys_lock)
+        lock_release(&filesys_lock);
 
       size_t zero_bytes = PGSIZE - p->read_bytes;
       memset(kpage + p->read_bytes, 0, zero_bytes);
@@ -235,7 +242,7 @@ page_fault (struct intr_frame *f)
           free_frame(f);
           hash_delete(&t->spt, &p->hash_elem);
           free(p);
-          exit(-1);
+          thread_exit();
       }
 
       p->status = IN_FRAME;
@@ -259,7 +266,7 @@ page_fault (struct intr_frame *f)
           free_frame(f);
           hash_delete(&t->spt, &p->hash_elem);
           free(p);
-          exit(-1);
+          thread_exit();
       }
 
       p->status = IN_FRAME;
@@ -267,19 +274,12 @@ page_fault (struct intr_frame *f)
       return;
   }
 
-  if (pagedir_get_page(t->pagedir, fault_addr) == NULL) 
-  {
-      exit(-1);
-  }
-
   if (!not_present && write) 
-  {
-      exit(-1);
-  }
+      thread_exit();
 #else
   if (!user || is_kernel_vaddr(fault_addr) || not_present)
   {
-      exit(-1);
+      thread_exit();
   }
 #endif
 

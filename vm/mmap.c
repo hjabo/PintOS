@@ -21,18 +21,15 @@ struct file* getfile(int fd);
 int
 do_mmap(int fd, void* addr)
 {
-    //lock_acquire(&file_lock);
     struct file* origin = getfile(fd);
     if (origin == NULL)
     {
-        //lock_release(&file_lock);
         return -1;
     }
 
     struct file* f = file_reopen(origin);
     if (f == NULL)
     {
-        //lock_release(&file_lock);
         return -1;
     }
 
@@ -40,15 +37,13 @@ do_mmap(int fd, void* addr)
     off_t length = file_length(f);
     if (length == 0)
     {
-        //lock_release(&file_lock);
         return -1;
     }
-    //lock_release(&file_lock);
 
     struct thread* t = thread_current();
 
     size_t read_bytes = length;
-    size_t zero_bytes = PGSIZE - read_bytes % PGSIZE;
+    size_t zero_bytes = (PGSIZE - read_bytes % PGSIZE) % PGSIZE;
 
     int pg_cnt = length <= PGSIZE ? 1 : length % PGSIZE ? length / PGSIZE + 1 : length / PGSIZE;
 
@@ -58,8 +53,6 @@ do_mmap(int fd, void* addr)
         if (page_find(&t->spt, check_addr) != NULL)
             return -1;
     }
-
-    //lock_acquire(&mmap_lock);
 
     struct mmap_entry* me = (struct mmap_entry*)malloc(sizeof(struct mmap_entry));
     int mapid = t->mapid_allocator++;
@@ -98,7 +91,6 @@ do_mmap(int fd, void* addr)
         addr += PGSIZE;
     }
 
-    //lock_release(&mmap_lock);
     return mapid;
 }
 
@@ -125,7 +117,7 @@ do_munmap(int mapid)
                 if (pagedir_is_dirty(p->pagedir, p->vaddr))
                 {
                     if (file_write_at(p->file, p->frame->paddr, p->read_bytes, p->offset) != (int)p->read_bytes)
-                        exit(-1);
+                        thread_exit();
                 }
                 if (mapid != -1)
                     free_frame(p->frame);

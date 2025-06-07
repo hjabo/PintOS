@@ -67,7 +67,7 @@ process_execute (const char *file_name)
   struct thread* t = NULL;
   for (e = list_begin(&cur->child); e != list_end(&cur->child); e = list_next(e)) {
       t = list_entry(e, struct thread, child_elem);
-      if (t->exit_status == -1) {
+      if (t->load_success == false) {
           return process_wait(tid);
       }
   }
@@ -186,7 +186,7 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   if (!success)
-      exit(-1);
+      thread_exit();
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -237,6 +237,16 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+#ifdef USERPROG
+  printf("%s: exit(%d)\n", cur->name, cur->exit_status); // Process Termination Message
+  int i;
+  for (i = 3; i < 128; i++) 
+  {
+      if (cur->fd[i] != NULL) 
+          file_close(cur->fd[i]);
+  }
+#endif
 
 #ifdef VM
   do_munmap(-1);
@@ -465,6 +475,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   //file_close (file);
+  t->load_success = success;
   return success;
 }
 

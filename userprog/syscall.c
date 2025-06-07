@@ -15,18 +15,21 @@
 #include "vm/mmap.h"
 #endif
 
+struct file
+{
+    struct inode* inode;        /* File's inode. */
+    off_t pos;                        /* Current position. */
+    bool deny_write;            /* Has file_deny_write() been called? */
+};
+
 void syscall_handler(struct intr_frame* f);
 struct file* getfile(int fd);
 void check_user_vaddr(const void* vaddr);
 
 void
-syscall_init (void) 
+syscall_init(void)
 {
-    lock_init(&file_lock);
-    intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-#ifdef VM
-    lock_init(&mmap_lock);
-#endif
+    intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 void
@@ -114,7 +117,7 @@ syscall_handler (struct intr_frame *f)
     #endif
 
         default:
-            exit(-1);
+            thread_exit();
             break;
     }
 }
@@ -130,13 +133,6 @@ exit(int status)
 {
 	struct thread* cur = thread_current();
     cur->exit_status = status;
-    int i;
-    for (i = 3; i < 128; i++) {
-        if (cur->fd[i] != NULL)
-            close(i);
-    }
-
-	printf("%s: exit(%d)\n", cur->name, status); // Process Termination Message
 	thread_exit();
 }
 
@@ -145,7 +141,7 @@ exec(const char* file)
 {
     char *fn_copy = palloc_get_page(0);
     if (fn_copy == NULL)
-        exit(-1);
+        thread_exit();
     strlcpy(fn_copy, file, PGSIZE);
     pid_t tid = process_execute(fn_copy);
     palloc_free_page(fn_copy);
@@ -162,7 +158,7 @@ bool
 create(const char* file, unsigned initial_size)
 {
     if (file == NULL)
-        exit(-1);
+        thread_exit();
     return filesys_create(file, initial_size);
 }
 
@@ -170,7 +166,7 @@ bool
 remove(const char* file)
 {
     if (file == NULL)
-        exit(-1);
+        thread_exit();
     return filesys_remove(file);
 }
 
@@ -178,12 +174,14 @@ int
 open(const char* file)
 {
     if (file == NULL)
-        exit(-1);
+    {
+        thread_exit();
+    }
     
-    lock_acquire(&file_lock);
+    lock_acquire(&filesys_lock);
     struct file* return_file = filesys_open(file);
     if (return_file == NULL) {
-        lock_release(&file_lock);
+        lock_release(&filesys_lock);
         return -1;
     }
 
@@ -195,11 +193,11 @@ open(const char* file)
             if (strcmp(thread_current()->name, file) == false)
                 file_deny_write(return_file);
             thread_current()->fd[i] = return_file;
-            lock_release(&file_lock);
+            lock_release(&filesys_lock);
             return i;
         }
     }
-    lock_release(&file_lock);
+    lock_release(&filesys_lock);
     return -1;
 }
 
@@ -208,7 +206,7 @@ filesize(int fd)
 {
     struct file* f = getfile(fd);
     if (f == NULL)
-        exit(-1);
+        thread_exit();
     else
         return file_length(f);
 }
@@ -217,7 +215,7 @@ int
 read(int fd, void* buffer, unsigned size)
 {
     check_user_vaddr(buffer);
-    lock_acquire(&file_lock);
+    lock_acquire(&filesys_lock);
     if (fd == 0)
         return 0;
     else
@@ -225,11 +223,11 @@ read(int fd, void* buffer, unsigned size)
         struct file* f = getfile(fd);
         if (f == NULL)
         {
-            lock_release(&file_lock);
-            exit(-1);
+            lock_release(&filesys_lock);
+            thread_exit();
         }
         int ret = file_read(f, buffer, size);
-        lock_release(&file_lock);
+        lock_release(&filesys_lock);
         return ret;
     }
 }
@@ -238,11 +236,11 @@ int
 write(int fd, const void* buffer, unsigned size)
 {
     check_user_vaddr(buffer);
-    lock_acquire(&file_lock);
+    lock_acquire(&filesys_lock);
     if (fd == 1)
     {
         putbuf(buffer, size);
-        lock_release(&file_lock);
+        lock_release(&filesys_lock);
         return size;
     }
     else
@@ -250,11 +248,11 @@ write(int fd, const void* buffer, unsigned size)
         struct file* f = getfile(fd);
         if (f == NULL)
         {
-            lock_release(&file_lock);
-            exit(-1);
+            lock_release(&filesys_lock);
+            thread_exit();
         }
         int ret = file_write(f, buffer, size);
-        lock_release(&file_lock);
+        lock_release(&filesys_lock);
         return ret;
     }
 }
@@ -264,7 +262,7 @@ seek(int fd, unsigned position)
 {
     struct file* f = getfile(fd);
     if (f == NULL)
-        exit(-1);
+        thread_exit();
     else
         return file_seek(f, position);
 }
@@ -274,7 +272,7 @@ tell(int fd)
 {
     struct file* f = getfile(fd);
     if (f == NULL)
-        exit(-1);
+        thread_exit();
     else
         return file_tell(f);
 }
@@ -284,7 +282,7 @@ close(int fd)
 {
     struct file* f = getfile(fd);
     if (f == NULL)
-        exit(-1);
+        thread_exit();
     file_close(f);
     thread_current()->fd[fd] = NULL;
 }
@@ -299,7 +297,7 @@ void
 check_user_vaddr(const void* vaddr)
 {
     if (!is_user_vaddr(vaddr))
-        exit(-1);
+        thread_exit();
 }
 
 #ifdef VM
@@ -309,9 +307,7 @@ mmap(int fd, void* addr)
 {
     if (addr == NULL || pg_ofs(addr) != 0 || !is_user_vaddr(addr))
         return -1;
-    lock_acquire(&mmap_lock);
     mapid_t mapid = do_mmap(fd, addr);
-    lock_release(&mmap_lock);
     return mapid;
 }
 
@@ -320,9 +316,7 @@ munmap(mapid_t mapid)
 {
     if (mapid < 0)
         return -1;
-    lock_acquire(&mmap_lock);
     do_munmap(mapid);
-    lock_release(&mmap_lock);
 }
 
 #endif

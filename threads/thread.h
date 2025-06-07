@@ -109,6 +109,7 @@ struct thread
     struct list_elem child_elem;
     int exit_status;
     struct file* fd[128];
+    bool load_success;
 #endif
 
 #ifdef VM
