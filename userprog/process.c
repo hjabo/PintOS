@@ -21,6 +21,7 @@
 #ifdef VM
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/mmap.h"
 #endif
 
 static thread_func start_process NO_RETURN;
@@ -238,6 +239,7 @@ process_exit (void)
   uint32_t *pd;
 
 #ifdef VM
+  do_munmap(-1);
   hash_destroy(&cur->spt, page_destructor);
 #endif
 
@@ -547,8 +549,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
     #ifdef VM
       struct page* p = (struct page*)malloc(sizeof(struct page));
-      if (p == NULL)
-          return false;
       p->vaddr = upage;
       p->frame = NULL;
       p->status = IN_DISK;
@@ -599,8 +599,6 @@ setup_stack (void **esp)
   bool success = false;
 #ifdef VM
   struct page* p = (struct page*)malloc(sizeof(struct page));
-  if (p == NULL)
-      return false;
   p->vaddr = PHYS_BASE - PGSIZE;  
   p->status = IN_FRAME;
   p->file = NULL;

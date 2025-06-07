@@ -164,8 +164,7 @@ page_fault (struct intr_frame *f)
 
   if (fault_addr == NULL || is_kernel_vaddr(fault_addr)) 
   {
-      //printf("Page fault at invalid address: fault_addr=%p, kernel_vaddr=%d\n", fault_addr, is_kernel_vaddr(fault_addr));
-      //PANIC("wtf");
+      //printf("%p Page fault at invalid address: fault_addr=%p, kernel_vaddr=%d\n", &t, fault_addr, is_kernel_vaddr(fault_addr));
       exit(-1);
   }
 
@@ -176,9 +175,7 @@ page_fault (struct intr_frame *f)
       char* esp = f->esp;
       if ((fault_addr > PHYS_BASE) || (fault_addr < PHYS_BASE - 0x800000) ||
           (fault_addr > (void*)(esp + 32)) || (fault_addr < (void*)(esp - 32))) 
-      {
           exit(-1);
-      }
 
       /* Grow stack page. */
       char* current_stack = PHYS_BASE - (t->stack_pages * PGSIZE);
@@ -196,9 +193,8 @@ page_fault (struct intr_frame *f)
           hash_insert(&t->spt, &nsp->hash_elem);
 
           t->stack_pages++;
-          if (t->stack_pages > 2048) {
+          if (t->stack_pages > 2048)
               exit(-1);
-          }
 
           struct frame_entry* stack_frame = get_frame();
           stack_frame->page_addr = nsp;
